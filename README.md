@@ -11,7 +11,7 @@ High-performance document scanner simulation. Add tilt, blur, grain, and thresho
 Split, join, and visualize IPv4 subnets effortlessly. Light-themed, responsive dashboard with real-time math.
 
 ### 🔤 [String Codec](./encoder-decoder.html)
-Universal local utility to safely encode and decode text using formats like Base64, UUEncode, URL Encoding, and ROT13. Includes intelligent auto-detection for decoding.
+Universal local utility to safely encode, decode, and hash text using formats like Base64, Base32, Base58, Hexadecimal, Binary, UUEncode, URL Encoding, and ROT13. Includes robust cryptographic checksum algorithms (MD5, SHA-1, SHA-256, SHA-512) via CryptoJS and intelligent auto-detection for decoding payloads.
 
 ---
 
