@@ -466,37 +466,38 @@ export default function App() {
         <aside className="w-80 bg-white border-r border-gray-200 flex flex-col shrink-0 z-10 shadow-sm">
           <div className="flex-1 overflow-y-auto p-5 space-y-6">
             
-            {/* Network Address Input */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Network Address
-              </label>
-              <input
-                type="text"
-                value={networkInput}
-                onChange={(e) => setNetworkInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="w-full bg-white border border-gray-300 text-gray-900 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono transition-all"
-                placeholder="192.168.1.0"
-              />
-            </div>
-
-            {/* Mask Bits Input */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Mask Bits
-              </label>
-              <div className="relative flex items-center">
-                <span className="absolute left-3 text-gray-500 font-mono text-sm">/</span>
+            {/* Network Address and Mask Bits Inputs */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2 space-y-2">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Network Address
+                </label>
                 <input
-                  type="number"
-                  min="0"
-                  max="32"
-                  value={cidrInput}
-                  onChange={(e) => setCidrInput(e.target.value)}
+                  type="text"
+                  value={networkInput}
+                  onChange={(e) => setNetworkInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className="w-full bg-white border border-gray-300 text-gray-900 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono transition-all"
+                  className="w-full bg-white border border-gray-300 text-gray-900 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono transition-all"
+                  placeholder="192.168.1.0"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Mask Bits
+                </label>
+                <div className="relative flex items-center">
+                  <span className="absolute left-2.5 text-gray-500 font-mono text-sm">/</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="32"
+                    value={cidrInput}
+                    onChange={(e) => setCidrInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    className="w-full bg-white border border-gray-300 text-gray-900 rounded-lg pl-6 pr-1 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono transition-all"
+                  />
+                </div>
               </div>
             </div>
 
