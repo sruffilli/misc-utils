@@ -35,3 +35,4 @@ When agents create or modify UI applications in this repository, they MUST adher
 - **Formatting**: Use standard 2-space indentation for HTML and JavaScript.
 - **Responsiveness**: Ensure the layout gracefully adapts to smaller screens using Tailwind's `sm:`, `md:`, etc., utility classes where appropriate.
 - **Graceful Failure**: If parsing data fails (e.g., invalid Base64 string), fail gracefully by catching errors and displaying intuitive, user-friendly error messages in the UI rather than breaking the application.
+- **Puns & Personality**: All utilities must include a "Pun Generator" (using a random array of funny, tool-specific puns) that populate the subtitle displayed in the UI header and the document title on load. This keeps the UX fun and engaging.
