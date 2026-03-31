@@ -18,9 +18,9 @@ When agents create or modify UI applications in this repository, they MUST adher
   - Height: `h-14` with a white background, bottom border, and flex row layout.
   - Left side: A 32x32px rounded brand-colored logo icon with a 1-letter abbreviation, placed next to the tool's Title and Subtitle.
   - Right side: Utility buttons like "Share Link" and a standard GitHub icon linking to the repository.
-- **Two-Column Layout (`<div className="flex flex-1 overflow-hidden">`)`:
-  - **Left Sidebar (`<aside>`)**: Fixed width (`w-80`), white background, right border. Used for placing controls, inputs, settings, and operation toggles.
-  - **Main Content (`<main>`)**: Flexible width (`flex-1`), light gray background (often using a `.bg-grid` utility class for a subtle dotted/grid pattern). Used for the primary output or main interactive workspace.
+- **Two-Column Layout (`<div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden">`)`:
+  - **Left Sidebar (`<aside>`)**: Responsive width (`w-full md:w-80`), white background, bottom border on mobile, right border on desktop (`border-b md:border-b-0 md:border-r`). Used for placing controls, inputs, settings, and operation toggles. This naturally stacks on top of the main content on smaller screens.
+  - **Main Content (`<main>`)**: Flexible width (`flex-1`), light gray background (often using a `.bg-grid` utility class for a subtle dotted/grid pattern). Used for the primary output or main interactive workspace. Ensure internal padding adjusts for mobile (`p-4 md:p-6`) and allow tables to scroll horizontally (`overflow-x-auto min-w-[size]`).
 - **Typography & Colors**:
   - Use `Inter` for sans-serif UI elements.
   - Use `JetBrains Mono` for code, IP addresses, or string payloads.
