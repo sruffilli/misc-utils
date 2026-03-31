@@ -1,6 +1,6 @@
 # Web Utilities
 
-A collection of single-file, portable web utilities that run directly in your browser.
+A collection of single-file, portable web utilities. Your data never leaves the browser. Ever. Unless there's a supply chain attack. In which case, tough luck.
 
 ## Utilities
 
