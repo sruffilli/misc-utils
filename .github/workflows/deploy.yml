@@ -1,0 +1,57 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Generate index.html
+        run: python scripts/generate_index.py
+
+      - name: Deploy to sruffilli.github.io
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+        run: |
+          if [ -z "$DEPLOY_TOKEN" ]; then
+            echo "DEPLOY_TOKEN is not set. Please set it in repository secrets."
+            exit 1
+          fi
+
+          # Clone the destination repository using token
+          git clone https://x-access-token:${DEPLOY_TOKEN}@github.com/sruffilli/sruffilli.github.io.git out
+
+          cd out
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Copy the generated index.html to the root of destination
+          cp ../index.html .
+
+          # Create subdirectory for webutils apps
+          mkdir -p webutils
+
+          # Copy only app HTML files (excluding index.html) to the subdirectory
+          find .. -maxdepth 1 -name "*.html" ! -name "index.html" -exec cp {} ./webutils/ \;
+
+          git add .
+          
+          # Commit and push only if there are changes
+          if git status --porcelain | grep -q .; then
+            git commit -m "Auto-deploy from webutils workspace"
+            git push origin main
+          else
+            echo "No changes to commit"
+          fi

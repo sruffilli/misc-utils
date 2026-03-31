@@ -317,11 +317,12 @@ const fillGrid = (grid, ip, cidr, splitNodes, rowIndex, colIndex) => {
     };
     
     // Details cells at the end of row
-    const detailsColStart = grid[0].length - 4;
-    grid[rowIndex][detailsColStart] = { content: details.netmaskStr, rowspan: 1 };
-    grid[rowIndex][detailsColStart + 1] = { content: details.rangeStr, rowspan: 1 };
-    grid[rowIndex][detailsColStart + 2] = { content: details.useableStr, rowspan: 1 };
-    grid[rowIndex][detailsColStart + 3] = { content: details.hosts.toLocaleString(), rowspan: 1 };
+    const detailsColStart = grid[0].length - 5;
+    grid[rowIndex][detailsColStart] = { content: `${details.networkStr}/${cidr}`, rowspan: 1 };
+    grid[rowIndex][detailsColStart + 1] = { content: details.netmaskStr, rowspan: 1 };
+    grid[rowIndex][detailsColStart + 2] = { content: details.rangeStr, rowspan: 1 };
+    grid[rowIndex][detailsColStart + 3] = { content: details.useableStr, rowspan: 1 };
+    grid[rowIndex][detailsColStart + 4] = { content: details.hosts.toLocaleString(), rowspan: 1 };
   }
 };
 
@@ -498,17 +499,19 @@ export default function App() {
     } catch (err) {
       console.warn("Failed to copy link:", err);
     }
+  };
+
   const handleCopySpreadsheet = () => {
     const leafCount = getLeafCount(baseIp, baseCidr, splitNodes);
     const maxDepth = getMaxDepth(baseIp, baseCidr, splitNodes);
-    const totalCols = (maxDepth + 1) + 4; // Levels + Details
+    const totalCols = (maxDepth + 1) + 5; // Levels + Details
     
     const grid = Array.from({ length: leafCount }, () => Array(totalCols).fill(null));
     fillGrid(grid, baseIp, baseCidr, splitNodes, 0, 0);
     
     let html = '<table border="1"><thead><tr>';
     for(let i=1; i<=maxDepth+1; i++) html += `<th>Level ${i}</th>`;
-    html += '<th>Netmask</th><th>Range</th><th>Useable IPs</th><th>Hosts</th></tr></thead><tbody>';
+    html += '<th>Subnet</th><th>Netmask</th><th>Range</th><th>Useable IPs</th><th>Hosts</th></tr></thead><tbody>';
 
     for (let r = 0; r < leafCount; r++) {
       html += '<tr>';
@@ -557,7 +560,7 @@ export default function App() {
   const handleCopyCSV = () => {
     const leafCount = getLeafCount(baseIp, baseCidr, splitNodes);
     const maxDepth = getMaxDepth(baseIp, baseCidr, splitNodes);
-    const totalCols = (maxDepth + 1) + 4;
+    const totalCols = (maxDepth + 1) + 5;
     
     const grid = Array.from({ length: leafCount }, () => Array(totalCols).fill(null));
     fillGrid(grid, baseIp, baseCidr, splitNodes, 0, 0);
@@ -566,7 +569,7 @@ export default function App() {
     // Header
     const headerCols = [];
     for(let i=1; i<=maxDepth+1; i++) headerCols.push(`"Level ${i}"`);
-    headerCols.push('"Netmask"','"Range"','"Useable IPs"','"Hosts"');
+    headerCols.push('"Subnet"','"Netmask"','"Range"','"Useable IPs"','"Hosts"');
     csv += headerCols.join(',') + '\n';
 
     for (let r = 0; r < leafCount; r++) {
