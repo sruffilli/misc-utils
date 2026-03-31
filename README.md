@@ -4,11 +4,14 @@ A collection of single-file, portable web utilities that run directly in your br
 
 ## Utilities
 
-### 📄 [Scanify Pro](file:///Users/sruffilli/git/webutils/pdf-scanner.html)
+### 📄 [Scanify Pro](./pdf-scanner.html)
 High-performance document scanner simulation. Add tilt, blur, grain, and threshold effects to PDFs to simulate real scanner output. Local processing only.
 
-### 🔢 [Visual Subnet Calculator](file:///Users/sruffilli/git/webutils/subnet-calculator.html)
+### 🔢 [Visual Subnet Calculator](./subnet-calculator.html)
 Split, join, and visualize IPv4 subnets effortlessly. Light-themed, responsive dashboard with real-time math.
+
+### 🔤 [String Codec](./encoder-decoder.html)
+Universal local utility to safely encode and decode text using formats like Base64, UUEncode, URL Encoding, and ROT13. Includes intelligent auto-detection for decoding.
 
 ---
 
