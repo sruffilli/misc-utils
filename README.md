@@ -13,6 +13,9 @@ Split, join, and visualize IPv4 subnets effortlessly. Light-themed, responsive d
 ### 🔤 [String Codec](./encoder-decoder.html)
 Universal local utility to safely encode, decode, and hash text using formats like Base64, Base32, Base58, Hexadecimal, Binary, UUEncode, URL Encoding, and ROT13. Includes robust cryptographic checksum algorithms (MD5, SHA-1, SHA-256, SHA-512) via CryptoJS and intelligent auto-detection for decoding payloads.
 
+### 🕸️ [CIDR Aggregator](./cidr-aggregator.html)
+A single-file visual utility to safely and optimally aggregate massive sets of IP addresses and subnets into their minimal corresponding CIDR blocks.
+
 ---
 
 ## How to use
