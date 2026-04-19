@@ -1,6 +1,6 @@
 # Repository Agents
 
-This repository and its tools are maintained and extended with the help of automated AI agents, primarily **Antigravity**.
+This repository and its tools are maintained and extended with the help of automated AI agents, primarily **Antigravity** and **Gemini CLI**.
 
 ## Architecture & Visual Guidelines
 
@@ -8,9 +8,11 @@ When agents create or modify UI applications in this repository, they MUST adher
 
 ### 1. Technology Stack
 - **Single-file HTML**: Tools must be portable, zero-build, single-page local applications contained entirely within a single `.html` file.
-- **React**: Use standard React via `https://esm.sh/react@19` (loaded in an Import Map).
+- **Frameworks**:
+  - **React (Preferred)**: Use standard React via `https://esm.sh/react@19` (loaded in an Import Map).
+  - **Vanilla JS**: Acceptable for performance-critical utilities or those requiring direct DOM/Canvas manipulation (e.g., `pdf-scanner.html`).
 - **Styling**: Use TailwindCSS via CDN (`https://cdn.tailwindcss.com`).
-- **Compilation**: Use `@babel/standalone` (`https://unpkg.com/@babel/standalone/babel.min.js`) for in-browser JSX transpilation.
+- **Compilation**: Use `@babel/standalone` (`https://unpkg.com/@babel/standalone/babel.min.js`) for in-browser JSX transpilation when using React.
 
 ### 2. Layout & Visual Language
 - **Base Wrapping**: Use a full-screen flex layout: `class="h-screen flex flex-col font-sans text-gray-800 bg-gray-50"`.

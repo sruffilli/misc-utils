@@ -18,5 +18,14 @@ A single-file visual utility to safely and optimally aggregate massive sets of I
 
 ---
 
+## Repository Structure
+- `webutils/`: The core collection of standalone HTML utilities.
+- `index.html`: The main landing page for the project.
+- `scripts/`: Python scripts for project maintenance (e.g., generating the index).
+- `AGENTS.md`: Technical and visual guidelines for AI agents maintaining this repository.
+
 ## How to use
 Simply double-click any `.html` file to open it in your browser. No installation or local server required!
+
+## Automated Maintenance
+This project is primarily maintained and extended by AI agents. For detailed technical guidelines on how new tools are built and what standards they follow, refer to [AGENTS.md](./AGENTS.md).
