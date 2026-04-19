@@ -4,16 +4,16 @@ A collection of single-file, portable web utilities. Your data never leaves the 
 
 ## Utilities
 
-### 📄 [Scanify Pro](./pdf-scanner.html)
+### 📄 [Scanify Pro](./webutils/pdf-scanner.html)
 High-performance document scanner simulation. Add tilt, blur, grain, and threshold effects to PDFs to simulate real scanner output. Local processing only.
 
-### 🔢 [Visual Subnet Calculator](./subnet-calculator.html)
+### 🔢 [Visual Subnet Calculator](./webutils/subnet-calculator.html)
 Split, join, and visualize IPv4 subnets effortlessly. Light-themed, responsive dashboard with real-time math.
 
-### 🔤 [String Codec](./encoder-decoder.html)
+### 🔤 [String Codec](./webutils/encoder-decoder.html)
 Universal local utility to safely encode, decode, and hash text using formats like Base64, Base32, Base58, Hexadecimal, Binary, UUEncode, URL Encoding, and ROT13. Includes robust cryptographic checksum algorithms (MD5, SHA-1, SHA-256, SHA-512) via CryptoJS and intelligent auto-detection for decoding payloads.
 
-### 🕸️ [CIDR Aggregator](./cidr-aggregator.html)
+### 🕸️ [CIDR Aggregator](./webutils/cidr-aggregator.html)
 A single-file visual utility to safely and optimally aggregate massive sets of IP addresses and subnets into their minimal corresponding CIDR blocks.
 
 ---

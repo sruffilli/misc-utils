@@ -40,11 +40,9 @@ jobs:
           # Copy the generated index.html to the root of destination
           cp ../index.html .
 
-          # Create subdirectory for webutils apps
-          mkdir -p webutils
-
-          # Copy only app HTML files (excluding index.html) to the subdirectory
-          find .. -maxdepth 1 -name "*.html" ! -name "index.html" -exec cp {} ./webutils/ \;
+          # Synchronize the webutils directory (clean replace)
+          rm -rf webutils
+          cp -r ../webutils .
 
           git add .
           
