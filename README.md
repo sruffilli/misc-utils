@@ -16,6 +16,9 @@ Universal local utility to safely encode, decode, and hash text using formats li
 ### 🕸️ [CIDR Aggregator](./webutils/cidr-aggregator.html)
 A single-file visual utility to safely and optimally aggregate massive sets of IP addresses and subnets into their minimal corresponding CIDR blocks.
 
+### 📋 [Hashbin](./webutils/hashbin.html)
+Share code snippets with syntax highlighting. No data is ever sent to a server.
+
 ---
 
 ## Repository Structure

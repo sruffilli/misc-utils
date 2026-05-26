@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hashbin</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          },
+          colors: {
+            brand: { 500: '#3b82f6', 600: '#2563eb' }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- highlight.js (theme + core) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <!-- Terraform/HCL grammar (not bundled in highlight.js core) -->
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/highlightjs-terraform/terraform.min.js"></script>
+  <!-- lz-string for URL fragment compression -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+
+    body { font-family: 'Inter', sans-serif; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .bg-grid {
+      background-size: 20px 20px;
+      background-image:
+        linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+        linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+    }
+
+    /* Overlay editor: textarea and highlight layer must share identical metrics */
+    .editor-wrap { position: relative; }
+    .editor-shared {
+      margin: 0;
+      padding: 0.5rem 1rem 1rem 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      tab-size: 2;
+      -moz-tab-size: 2;
+      white-space: pre;
+      word-wrap: normal;
+      overflow: auto;
+      border: 0;
+      box-sizing: border-box;
+    }
+    .editor-highlight {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background: #ffffff;
+    }
+    .editor-highlight code,
+    .readonly-pre code {
+      font-family: inherit;
+      background: transparent !important;
+      padding: 0 !important;
+    }
+    .editor-textarea {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      resize: none;
+      background: transparent;
+      color: transparent;
+      caret-color: #111827;
+      outline: none;
+    }
+    .editor-textarea::selection { background: rgba(37, 99, 235, 0.25); }
+    /* hljs sets its own background + padding on the root; neutralize it so the
+       first code line aligns with the gutter in both the editor and read-only view */
+    .editor-highlight .hljs,
+    .readonly-pre .hljs { background: transparent; padding: 0; }
+
+    /* Line-number gutter: shares font metrics + top padding with .editor-shared.
+       Width is fixed; the code layers get left padding to clear it. */
+    .gutter {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 3rem;
+      padding: 0.5rem 0.5rem 1rem 0;
+      margin: 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      text-align: right;
+      color: #9ca3af;
+      background: #f9fafb;
+      border-right: 1px solid #eef0f2;
+      white-space: pre;
+      overflow: hidden;
+      pointer-events: none;
+      box-sizing: border-box;
+      z-index: 2;
+      user-select: none;
+    }
+    /* Make room for the gutter; 3rem width + 0.75rem gap before code. */
+    .has-gutter .editor-shared { padding-left: 3.75rem; }
+    /* Read-only pre fills the wrap and scrolls itself (no textarea overlay). */
+    .readonly-pre { position: absolute; inset: 0; background: #fff; z-index: 1; }
+
+    .tab { display:flex; align-items:center; gap:6px; padding:5px 10px; font-size:12px;
+           font-family:'JetBrains Mono',monospace; background:#f3f4f6; border:1px solid #e5e7eb;
+           border-radius:6px; cursor:pointer; white-space:nowrap; color:#6b7280; }
+    .tab.active { background:#fff; color:#111827; border-color:#d1d5db; font-weight:500; }
+    .tab .tab-name { outline:none; }
+    .tab .tab-name[contenteditable="true"] { background:#fff; border-bottom:1px solid #2563eb; }
+    .tab .tab-close { color:#9ca3af; font-size:14px; line-height:1; }
+    .tab .tab-close:hover { color:#ef4444; }
+    .tab-add { padding:5px 9px; font-size:14px; color:#2563eb; cursor:pointer; border-radius:6px; }
+    .tab-add:hover { background:#eff6ff; }
+
+    .file-row { display:flex; align-items:center; gap:6px; padding:5px 8px; font-size:13px;
+                font-family:'JetBrains Mono',monospace; border-radius:6px; cursor:pointer;
+                color:#374151; }
+    .file-row:hover { background:#f3f4f6; }
+    .file-row.active { background:#e0e7ff; color:#1e3a8a; font-weight:500; }
+    .file-row .file-name { flex:1; outline:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .file-row .file-name[contenteditable="true"] { background:#fff; border-bottom:1px solid #2563eb; }
+    .file-row .file-close { color:#9ca3af; font-size:15px; line-height:1; }
+    .file-row .file-close:hover { color:#ef4444; }
+    .file-add { display:flex; align-items:center; gap:6px; padding:5px 8px; font-size:13px;
+                color:#2563eb; cursor:pointer; border-radius:6px; margin-top:2px; }
+    .file-add:hover { background:#eff6ff; }
+  </style>
+</head>
+
+<body class="h-screen flex flex-col font-sans text-gray-800 bg-gray-50">
+  <!-- Navbar -->
+  <nav class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold text-sm">H</div>
+      <div class="leading-tight">
+        <div class="font-semibold text-sm">Hashbin</div>
+        <div id="subtitle" class="text-xs text-gray-500">Snippets that hash it out</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="shareBtn"
+        class="text-sm bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-md font-medium transition-colors">
+        Share Link
+      </button>
+      <a href="https://github.com/" target="_blank" rel="noopener"
+        class="text-gray-500 hover:text-gray-800 p-1.5" aria-label="GitHub repository">
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+        </svg>
+      </a>
+    </div>
+  </nav>
+
+  <!-- Body -->
+  <div class="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-full md:w-80 bg-white border-b md:border-b-0 md:border-r border-gray-200 p-4 flex flex-col gap-4 shrink-0">
+      <div class="flex flex-col min-h-0">
+        <div class="text-xs font-semibold text-gray-600 mb-1.5">Files</div>
+        <div id="fileList" class="flex flex-col gap-0.5 overflow-y-auto"></div>
+      </div>
+
+      <div class="flex flex-col gap-2 mt-auto">
+        <button id="copyLinkBtn"
+          class="text-sm border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-md font-medium transition-colors text-left">
+          Copy Share Link
+        </button>
+        <button id="copyRawBtn"
+          class="text-sm border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-md font-medium transition-colors text-left">
+          Copy Raw Text
+        </button>
+        <button id="newBtn"
+          class="text-sm text-gray-500 hover:text-gray-800 px-3 py-1.5 rounded-md font-medium transition-colors text-left">
+          New Snippet
+        </button>
+      </div>
+
+      <div id="statusMsg" class="text-xs h-4"></div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 bg-gray-50 bg-grid p-4 md:p-6 overflow-hidden flex flex-col min-h-[300px]">
+      <!-- Error banner -->
+      <div id="errorBanner"
+        class="hidden mb-3 text-sm bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-3 py-2"></div>
+
+      <!-- Read-only shared view -->
+      <div id="readonlyView" class="hidden flex-1 flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div class="flex items-center gap-3 px-3 py-1.5 border-b border-gray-200 bg-gray-50 shrink-0">
+          <span id="roFileName" class="text-xs font-medium text-gray-700 mono truncate"></span>
+          <select id="roLangSelect"
+            class="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-brand-500">
+            <option value="auto">Auto-detect</option>
+          </select>
+          <span id="roDetectedLang" class="text-xs text-gray-400"></span>
+          <span class="ml-auto text-xs text-gray-400"><span id="roCharCount">0</span> chars</span>
+          <button id="forkBtn"
+            class="text-sm bg-brand-600 hover:bg-brand-500 text-white px-3 py-1 rounded-md font-medium transition-colors">
+            Fork / Edit
+          </button>
+        </div>
+        <div class="editor-wrap has-gutter flex-1 overflow-hidden">
+          <div id="roGutter" class="gutter mono" aria-hidden="true">1</div>
+          <pre id="readonlyPre" class="editor-shared readonly-pre"><code id="readonlyCode" class="hljs"></code></pre>
+        </div>
+      </div>
+
+      <!-- Editable overlay editor -->
+      <div id="editorView" class="flex-1 flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <!-- Editor toolbar: active filename, language, char count -->
+        <div class="flex items-center gap-3 px-3 py-1.5 border-b border-gray-200 bg-gray-50 shrink-0">
+          <span id="activeFileName" class="text-xs font-medium text-gray-700 mono truncate"></span>
+          <select id="langSelect"
+            class="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-brand-500">
+            <option value="auto">Auto-detect</option>
+          </select>
+          <span id="detectedLang" class="text-xs text-gray-400"></span>
+          <span class="ml-auto text-xs text-gray-400"><span id="charCount">0</span> chars</span>
+        </div>
+        <div class="editor-wrap has-gutter flex-1 overflow-hidden">
+          <div id="editorGutter" class="gutter mono" aria-hidden="true">1</div>
+          <pre class="editor-shared editor-highlight" aria-hidden="true"><code id="highlightCode"></code></pre>
+          <textarea id="editorTextarea" class="editor-shared editor-textarea mono"
+            spellcheck="false" autocomplete="off" autocapitalize="off"
+            placeholder="Paste or type your code here..."></textarea>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var PUNS = [
+        'Snippets that hash it out',
+        'Fragmentarily yours',
+        'Paste responsibly',
+        'Where code goes to # out',
+        'No server, no problem',
+        'Your snippets never leave the building'
+      ];
+
+      // --- DOM refs ---
+      var els = {
+        subtitle: document.getElementById('subtitle'),
+        langSelect: document.getElementById('langSelect'),
+        detectedLang: document.getElementById('detectedLang'),
+        charCount: document.getElementById('charCount'),
+        activeFileName: document.getElementById('activeFileName'),
+        fileList: document.getElementById('fileList'),
+        roLangSelect: document.getElementById('roLangSelect'),
+        roFileName: document.getElementById('roFileName'),
+        roDetectedLang: document.getElementById('roDetectedLang'),
+        roCharCount: document.getElementById('roCharCount'),
+        shareBtn: document.getElementById('shareBtn'),
+        copyLinkBtn: document.getElementById('copyLinkBtn'),
+        copyRawBtn: document.getElementById('copyRawBtn'),
+        newBtn: document.getElementById('newBtn'),
+        statusMsg: document.getElementById('statusMsg'),
+        errorBanner: document.getElementById('errorBanner'),
+        readonlyView: document.getElementById('readonlyView'),
+        readonlyCode: document.getElementById('readonlyCode'),
+        forkBtn: document.getElementById('forkBtn'),
+        editorView: document.getElementById('editorView'),
+        highlightCode: document.getElementById('highlightCode'),
+        textarea: document.getElementById('editorTextarea'),
+        editorGutter: document.getElementById('editorGutter'),
+        roGutter: document.getElementById('roGutter'),
+        readonlyPre: document.getElementById('readonlyPre')
+      };
+
+      // --- Pun in subtitle + document title ---
+      var pun = PUNS[Math.floor(Math.random() * PUNS.length)];
+      els.subtitle.textContent = pun;
+      document.title = 'Hashbin — ' + pun;
+
+      // --- Populate language dropdown from highlight.js registered languages ---
+      // Register third-party grammars not bundled in highlight.js core.
+      function registerExtraLanguages() {
+        if (!window.hljs || hljs.getLanguage('terraform')) return;
+        // The terraform CDN script exposes its definer via module.exports.definer
+        // (and a global hljsDefineTerraform as a fallback).
+        var definer =
+          (window.module && window.module.exports && window.module.exports.definer) ||
+          window.hljsDefineTerraform;
+        if (typeof definer === 'function') {
+          try { hljs.registerLanguage('terraform', definer); } catch (e) { /* ignore */ }
+        }
+      }
+
+      function populateLanguages() {
+        registerExtraLanguages();
+        var langs = (window.hljs && hljs.listLanguages) ? hljs.listLanguages().slice() : [];
+        langs.sort();
+        [els.langSelect, els.roLangSelect].forEach(function (sel) {
+          langs.forEach(function (l) {
+            var opt = document.createElement('option');
+            opt.value = l;
+            opt.textContent = l;
+            sel.appendChild(opt);
+          });
+        });
+      }
+
+      // --- Highlight helpers ---
+      function escapeHtml(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      // Map a filename's extension to a highlight.js language id (or null if unknown).
+      var EXT_LANG = {
+        tf: 'terraform', py: 'python', js: 'javascript', ts: 'typescript',
+        json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sh: 'bash',
+        go: 'go', rs: 'rust', rb: 'ruby', java: 'java', c: 'c', h: 'c',
+        cpp: 'cpp', cc: 'cpp', css: 'css', html: 'xml', xml: 'xml',
+        sql: 'sql', toml: 'ini', ini: 'ini'
+      };
+      function extToLang(name) {
+        if (!name) return null;
+        var dot = name.lastIndexOf('.');
+        if (dot === -1 || dot === name.length - 1) return null;
+        var ext = name.slice(dot + 1).toLowerCase();
+        return EXT_LANG[ext] || null;
+      }
+
+      // highlightAuto() runs every registered grammar and is very expensive
+      // (~200ms on a 200-line file, ~1s on 1000 lines) — far too slow to run on
+      // every keystroke. Instead, in auto mode we detect the language *once* and
+      // cache it, then re-highlight with the fast explicit path (~3ms). Detection
+      // also runs on a truncated sample, since the first few KB are enough.
+      var DETECT_SAMPLE_LIMIT = 4000;
+      var autoDetectCache = null; // last language detected in auto mode
+
+      function detectLanguage(code) {
+        var sample = code.length > DETECT_SAMPLE_LIMIT ? code.slice(0, DETECT_SAMPLE_LIMIT) : code;
+        try {
+          return hljs.highlightAuto(sample).language || null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // Returns { html, detected } where detected is the resolved language (or null).
+      // When forceDetect is true (e.g. switching to auto, or first render), re-run
+      // detection; otherwise reuse the cached detection to stay fast per keystroke.
+      function highlight(code, lang, forceDetect) {
+        if (!window.hljs) return { html: escapeHtml(code), detected: null };
+        try {
+          var useLang;
+          if (lang && lang !== 'auto' && hljs.getLanguage(lang)) {
+            useLang = lang;
+          } else {
+            // auto mode: detect once (or when forced), then reuse the cache
+            if (forceDetect || autoDetectCache === null) {
+              autoDetectCache = detectLanguage(code);
+            }
+            useLang = autoDetectCache;
+          }
+          if (useLang && hljs.getLanguage(useLang)) {
+            var r = hljs.highlight(code, { language: useLang, ignoreIllegals: true });
+            return { html: r.value, detected: useLang };
+          }
+          // no usable language — render as escaped plain text
+          return { html: escapeHtml(code), detected: null };
+        } catch (e) {
+          return { html: escapeHtml(code), detected: null };
+        }
+      }
+
+      // --- Files model ---
+      // A snippet is a list of files; exactly one is active. Always >= 1 file.
+      function makeModel() {
+        return { files: [{ name: '', lang: 'auto', content: '', langManual: false }], activeIndex: 0 };
+      }
+      var model = makeModel();
+      function activeFile() { return model.files[model.activeIndex]; }
+
+      function addFile(mdl) {
+        mdl = mdl || model;
+        mdl.files.push({ name: '', lang: 'auto', content: '', langManual: false });
+        mdl.activeIndex = mdl.files.length - 1;
+      }
+
+      function deleteFile(mdl, idx) {
+        mdl = mdl || model;
+        if (mdl.files.length <= 1) return; // protect the last file
+        mdl.files.splice(idx, 1);
+        if (mdl.activeIndex >= mdl.files.length) mdl.activeIndex = mdl.files.length - 1;
+      }
+
+      function renameFile(mdl, idx, name) {
+        mdl = mdl || model;
+        var f = mdl.files[idx];
+        f.name = name;
+        if (!f.langManual && f.lang === 'auto') {
+          var inferred = extToLang(name);
+          if (inferred) f.lang = inferred;
+        }
+      }
+
+      // --- File list (sidebar) ---
+      function loadActiveIntoEditor() {
+        var f = activeFile();
+        els.textarea.value = f.content;
+        els.activeFileName.textContent = f.name || 'untitled';
+        els.langSelect.value = (f.lang && [].some.call(els.langSelect.options, function (o){ return o.value === f.lang; })) ? f.lang : 'auto';
+        renderHighlightLayer(true);
+      }
+
+      function saveEditorIntoActive() {
+        activeFile().content = els.textarea.value;
+      }
+
+      function activateFile(idx) {
+        saveEditorIntoActive();
+        model.activeIndex = idx;
+        renderFileList();
+        loadActiveIntoEditor();
+        els.textarea.focus();
+      }
+
+      function renderFileList() {
+        var ro = !els.readonlyView.classList.contains('hidden');
+        els.fileList.innerHTML = '';
+        model.files.forEach(function (f, idx) {
+          var row = document.createElement('div');
+          row.className = 'file-row' + (idx === model.activeIndex ? ' active' : '');
+          var name = document.createElement('span');
+          name.className = 'file-name';
+          name.textContent = f.name || 'untitled';
+          row.addEventListener('click', function () {
+            if (idx === model.activeIndex) return;
+            if (ro) { model.activeIndex = idx; renderFileList(); renderReadonly(); }
+            else { activateFile(idx); }
+          });
+          if (!ro) {
+            name.title = 'Double-click to rename';
+            name.addEventListener('dblclick', function (e) { e.stopPropagation(); beginRename(name, idx); });
+          }
+          row.appendChild(name);
+          if (!ro && model.files.length > 1) {
+            var close = document.createElement('span');
+            close.className = 'file-close';
+            close.textContent = '×';
+            close.title = 'Delete file';
+            close.addEventListener('click', function (e) {
+              e.stopPropagation();
+              var wasActive = idx === model.activeIndex;
+              deleteFile(model, idx);
+              renderFileList();
+              if (wasActive) loadActiveIntoEditor();
+            });
+            row.appendChild(close);
+          }
+          els.fileList.appendChild(row);
+        });
+        if (!ro) {
+          var add = document.createElement('div');
+          add.className = 'file-add';
+          add.textContent = '＋ Add file';
+          add.addEventListener('click', function () {
+            saveEditorIntoActive();
+            addFile(model);
+            renderFileList();
+            loadActiveIntoEditor();
+            els.textarea.focus();
+          });
+          els.fileList.appendChild(add);
+        }
+      }
+
+      function beginRename(nameEl, idx) {
+        nameEl.setAttribute('contenteditable', 'true');
+        nameEl.textContent = model.files[idx].name;
+        nameEl.focus();
+        var range = document.createRange(); range.selectNodeContents(nameEl);
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        function commit() {
+          nameEl.removeAttribute('contenteditable');
+          renameFile(model, idx, nameEl.textContent.trim());
+          renderFileList();
+          if (idx === model.activeIndex) loadActiveIntoEditor();
+          nameEl.removeEventListener('blur', commit);
+          nameEl.removeEventListener('keydown', onKey);
+        }
+        function onKey(e) {
+          if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
+          else if (e.key === 'Escape') { e.preventDefault(); nameEl.textContent = model.files[idx].name; nameEl.blur(); }
+        }
+        nameEl.addEventListener('blur', commit);
+        nameEl.addEventListener('keydown', onKey);
+      }
+
+      // Re-detect periodically as content grows, so auto mode adapts to a snippet
+      // that started empty/ambiguous, without paying detection cost every keystroke.
+      var lastDetectLen = 0;
+
+      // Update a gutter's line numbers, but only when the line count changes
+      // (rebuilding the gutter text every keystroke would be wasteful).
+      function renderGutter(gutterEl, code) {
+        var n = code.split('\n').length;
+        if (String(gutterEl._lineCount) === String(n)) return;
+        gutterEl._lineCount = n;
+        var lines = new Array(n);
+        for (var i = 0; i < n; i++) lines[i] = i + 1;
+        gutterEl.textContent = lines.join('\n');
+      }
+
+      function renderHighlightLayer(forceDetect) {
+        var code = els.textarea.value;
+        var lang = els.langSelect.value;
+        if (model.files.length) activeFile().content = code; // keep model in sync
+        renderGutter(els.editorGutter, code);
+        if (lang === 'auto') {
+          // refresh detection on first render, when forced, or after the content
+          // length has changed enough that the guess may have shifted
+          if (forceDetect || Math.abs(code.length - lastDetectLen) > 80) {
+            forceDetect = true;
+            lastDetectLen = code.length;
+          }
+        }
+        var res = highlight(code, lang, forceDetect);
+        // trailing newline keeps the highlight layer height in sync with textarea
+        els.highlightCode.innerHTML = res.html + '\n';
+        els.charCount.textContent = code.length;
+        if (lang === 'auto') {
+          els.detectedLang.textContent = res.detected ? ('Detected: ' + res.detected) : '';
+        } else {
+          els.detectedLang.textContent = '';
+        }
+      }
+
+      // Explicit-language highlight is ~3ms, so we render every keystroke — no
+      // debounce. A debounce here is *felt* as lag because the textarea text is
+      // transparent: until the highlight layer repaints there is no visible glyph
+      // under the caret. We coalesce to one render per frame via requestAnimationFrame.
+      var rafPending = false;
+      function scheduleRender() {
+        els.charCount.textContent = els.textarea.value.length;
+        if (rafPending) return;
+        rafPending = true;
+        requestAnimationFrame(function () {
+          rafPending = false;
+          renderHighlightLayer();
+        });
+      }
+
+      function syncScroll() {
+        var pre = els.highlightCode.parentElement;
+        pre.scrollTop = els.textarea.scrollTop;
+        pre.scrollLeft = els.textarea.scrollLeft;
+        // gutter scrolls vertically with the text (top padding already matches)
+        els.editorGutter.scrollTop = els.textarea.scrollTop;
+      }
+
+      els.textarea.addEventListener('input', function () {
+        scheduleRender();
+        syncScroll();
+      });
+      els.textarea.addEventListener('scroll', syncScroll);
+      // Read-only pre scrolls itself; keep its gutter in sync.
+      els.readonlyPre.addEventListener('scroll', function () {
+        els.roGutter.scrollTop = els.readonlyPre.scrollTop;
+      });
+      els.langSelect.addEventListener('change', function () {
+        // editor toolbar dropdown: record the choice on the active file
+        var f = activeFile();
+        f.lang = els.langSelect.value;
+        f.langManual = (f.lang !== 'auto');
+        renderHighlightLayer(true);
+      });
+      els.roLangSelect.addEventListener('change', function () {
+        // read-only toolbar dropdown: record on the active file, re-render
+        var rf = model.files[model.activeIndex];
+        rf.lang = els.roLangSelect.value;
+        rf.langManual = (rf.lang !== 'auto');
+        renderReadonly();
+      });
+
+      // --- Tab key inserts spaces instead of leaving the field ---
+      els.textarea.addEventListener('keydown', function (e) {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          var start = els.textarea.selectionStart;
+          var end = els.textarea.selectionEnd;
+          var v = els.textarea.value;
+          els.textarea.value = v.slice(0, start) + '  ' + v.slice(end);
+          els.textarea.selectionStart = els.textarea.selectionEnd = start + 2;
+          scheduleRender();
+        }
+      });
+
+      // --- View switching ---
+      function showEditor() {
+        els.readonlyView.classList.add('hidden');
+        els.editorView.classList.remove('hidden');
+      }
+
+      // Render the active file's content in the read-only view (model-based).
+      function renderReadonly() {
+        var f = model.files[model.activeIndex];
+        var res = highlight(f.content, f.lang, true);
+        els.readonlyCode.innerHTML = res.html;
+        renderGutter(els.roGutter, f.content);
+        els.roGutter.scrollTop = 0;
+        els.readonlyPre.scrollTop = 0;
+        els.roFileName.textContent = f.name || 'untitled';
+        els.roCharCount.textContent = f.content.length;
+        els.roLangSelect.value =
+          (f.lang && [].some.call(els.roLangSelect.options, function (o) { return o.value === f.lang; }))
+            ? f.lang : 'auto';
+        if (f.lang === 'auto') {
+          els.roDetectedLang.textContent = res.detected ? ('Detected: ' + res.detected) : '';
+        } else {
+          els.roDetectedLang.textContent = '';
+        }
+      }
+
+      function showReadonly() {
+        els.editorView.classList.add('hidden');
+        els.readonlyView.classList.remove('hidden');
+        renderFileList();
+        renderReadonly();
+      }
+
+      els.forkBtn.addEventListener('click', function () {
+        showEditor();
+        // Clear the hash so the forked copy starts fresh (no stale shared state).
+        if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+        renderFileList();
+        loadActiveIntoEditor();
+        els.textarea.focus();
+      });
+
+      els.newBtn.addEventListener('click', function () {
+        showEditor();
+        model = makeModel();
+        if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+        renderFileList();
+        loadActiveIntoEditor();
+        els.textarea.focus();
+      });
+
+      // --- Sharing / URL fragment encoding ---
+      // Fragment format v2: #<lz-compressed JSON> where JSON =
+      //   { v:2, active:<index>, files:[ {n:name, l:lang, c:content}, ... ] }
+      function encodePayload(files, active) {
+        var payload = {
+          v: 2,
+          active: active,
+          files: files.map(function (f) { return { n: f.name, l: f.lang, c: f.content }; })
+        };
+        return '#' + LZString.compressToEncodedURIComponent(JSON.stringify(payload));
+      }
+
+      function decodePayload(hash) {
+        var raw = hash.slice(1); // drop '#'
+        if (!raw) return null;
+        var json = LZString.decompressFromEncodedURIComponent(raw);
+        if (!json) return null;
+        var obj;
+        try { obj = JSON.parse(json); } catch (e) { return null; }
+        if (!obj || !Array.isArray(obj.files) || obj.files.length === 0) return null;
+        var files = obj.files.map(function (f) {
+          return {
+            name: typeof f.n === 'string' ? f.n : '',
+            lang: typeof f.l === 'string' ? f.l : 'auto',
+            content: typeof f.c === 'string' ? f.c : '',
+            langManual: !!(f.l && f.l !== 'auto')
+          };
+        });
+        var active = (typeof obj.active === 'number' && obj.active >= 0 && obj.active < files.length) ? obj.active : 0;
+        return { files: files, active: active };
+      }
+
+      function buildShareUrl() {
+        return location.origin + location.pathname + location.search +
+          encodePayload(model.files, model.activeIndex);
+      }
+
+      function flashStatus(msg, isError) {
+        els.statusMsg.textContent = msg;
+        els.statusMsg.className = 'text-xs h-4 ' + (isError ? 'text-red-600' : 'text-green-600');
+        setTimeout(function () { els.statusMsg.textContent = ''; }, 2500);
+      }
+
+      function copyToClipboard(text, okMsg) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            function () { flashStatus(okMsg, false); },
+            function () { flashStatus('Copy failed — copy from the address bar', true); }
+          );
+        } else {
+          flashStatus('Clipboard unavailable — copy from the address bar', true);
+        }
+      }
+
+      function doShare() {
+        var url = buildShareUrl();
+        // Update the address bar without reloading.
+        var hashIdx = url.indexOf('#');
+        if (hashIdx !== -1) history.replaceState(null, '', url.slice(hashIdx));
+        copyToClipboard(url, 'Share link copied!');
+      }
+
+      els.shareBtn.addEventListener('click', doShare);
+      els.copyLinkBtn.addEventListener('click', doShare);
+      els.copyRawBtn.addEventListener('click', function () {
+        if (els.readonlyView.classList.contains('hidden')) saveEditorIntoActive();
+        copyToClipboard(model.files[model.activeIndex].content, 'Raw text copied!');
+      });
+
+      // --- Init ---
+      function showError(msg) {
+        els.errorBanner.textContent = msg;
+        els.errorBanner.classList.remove('hidden');
+      }
+
+      function init() {
+        populateLanguages();
+
+        if (location.hash) {
+          var parsed = null;
+          try { parsed = decodePayload(location.hash); } catch (e) { parsed = null; }
+          if (parsed) {
+            // valid shared link -> read-only tabbed view
+            model = { files: parsed.files, activeIndex: parsed.active };
+            showReadonly();
+            return;
+          }
+          // bad hash -> graceful fallback to empty editable editor
+          showError("Couldn't decode this link. Starting with an empty snippet.");
+        }
+
+        model = makeModel();
+        showEditor();
+        renderFileList();
+        loadActiveIntoEditor();
+      }
+
+      // highlight.js loads synchronously via the CDN <script>, but guard anyway.
+      if (window.hljs) {
+        init();
+      } else {
+        window.addEventListener('load', init);
+      }
+    })();
+  </script>
+</body>
+
+</html>
