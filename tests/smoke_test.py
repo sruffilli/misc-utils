@@ -127,6 +127,73 @@ def subnet_divide_and_join(c: Ctx):
     no_errors(page)
 
 
+def subnet_rows(page: Page):
+    return page.get_by_title("Split into two smaller subnets")
+
+
+@test
+def subnet_ignores_garbage_saved_state(c: Ctx):
+    page = c.page("/webutils/subnet-calculator.html",
+                  storage={"subnet-calc-network": "abc", "subnet-calc-cidr": "33"})
+    expect(page.get_by_text("10.128.160.0", exact=True).first).to_be_visible()
+    expect(subnet_rows(page)).to_have_count(1)
+    no_errors(page)
+
+
+@test
+def subnet_persists_only_committed_network(c: Ctx):
+    page = c.page("/webutils/subnet-calculator.html")
+    page.get_by_role("textbox").first.fill("172.16.5.9")
+    page.locator("input[type=number]").first.fill("16")
+    page.get_by_role("button", name="Update").click()
+    expect(page.get_by_role("textbox").first).to_have_value("172.16.0.0")
+    page.get_by_role("textbox").first.fill("10.0")  # half-typed draft
+    page.goto(c.base + "/webutils/subnet-calculator.html")  # reopen without any link
+    expect(page.get_by_role("textbox").first).to_have_value("172.16.0.0")
+    expect(page.locator("input[type=number]").first).to_have_value("16")
+    no_errors(page)
+
+
+@test
+def subnet_links_are_validated(c: Ctx):
+    for link in ["#ip=192.168.1.77&cidr=24&split=192.168.1.0/24", "?ip=192.168.1.77&cidr=24&split=192.168.1.0/24"]:
+        page = c.page("/webutils/subnet-calculator.html" + link)
+        expect(page.get_by_role("textbox").first).to_have_value("192.168.1.0")
+        expect(subnet_rows(page)).to_have_count(2)
+        assert "?" not in page.url and "#ip=192.168.1.0&cidr=24" in page.url, page.url
+        no_errors(page)
+        page.context.close()
+    # junk, misaligned and out-of-range split ids are dropped
+    page = c.page("/webutils/subnet-calculator.html#ip=192.168.1.0&cidr=24"
+                  "&split=192.168.1.0/24,10.0.0.0/8,192.168.1.5/30,abc,192.168.1.0/32")
+    expect(subnet_rows(page)).to_have_count(2)
+    no_errors(page)
+    page.context.close()
+    page = c.page("/webutils/subnet-calculator.html#ip=foo&cidr=99")
+    expect(page.get_by_text("Ignored invalid link")).to_be_visible()
+    expect(page.get_by_text("10.128.160.0", exact=True).first).to_be_visible()
+    no_errors(page)
+
+
+@test
+def subnet_exports(c: Ctx):
+    page = c.page("/webutils/subnet-calculator.html#ip=10.0.0.0&cidr=30&split=10.0.0.0/30")
+    expect(subnet_rows(page)).to_have_count(2)  # two /31 leaves
+    page.get_by_role("button", name="CSV").click()
+    expect(page.get_by_text("Copied!")).to_be_visible()
+    csv = page.evaluate("navigator.clipboard.readText()")
+    assert csv.splitlines() == [
+        '"Level 1","Level 2","Subnet","Netmask","Range","Useable IPs","Hosts"',
+        '"10.0.0.0/30","10.0.0.0/31","10.0.0.0/31","255.255.255.254","10.0.0.0 - 10.0.0.1","10.0.0.0 - 10.0.0.1","2"',
+        '"10.0.0.0/30","10.0.0.2/31","10.0.0.2/31","255.255.255.254","10.0.0.2 - 10.0.0.3","10.0.0.2 - 10.0.0.3","2"',
+    ], repr(csv)
+    page.get_by_role("button", name="Spreadsheet").click()
+    expect(page.get_by_text("Copied!")).to_have_count(2)
+    tsv = page.evaluate("navigator.clipboard.readText()")
+    assert tsv.splitlines()[1].split("\t")[:2] == ["10.0.0.0/30", "10.0.0.0/31"], tsv
+    no_errors(page)
+
+
 # --- CIDR aggregator ----------------------------------------------------------
 
 @test
