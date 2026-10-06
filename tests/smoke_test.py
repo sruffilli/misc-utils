@@ -153,6 +153,93 @@ def codec_base64_roundtrip(c: Ctx):
     no_errors(page)
 
 
+def codec_set(page: Page, mode: str, algo: str, text: str):
+    page.get_by_role("button", name=mode, exact=True).click()
+    page.locator("select").select_option(algo)
+    page.locator("textarea").first.fill(text)
+
+
+@test
+def codec_unicode_roundtrips(c: Ctx):
+    """Byte codecs used to split non-ASCII text into UTF-16 code units."""
+    text = "€ héllo 日本 🎉"
+    expected = {
+        "Hexadecimal": "e282ac2068c3a96c6c6f20e697a5e69cac20f09f8e89",
+        "Base64": "4oKsIGjDqWxsbyDml6XmnKwg8J+OiQ==",
+    }
+    page = c.page("/webutils/encoder-decoder.html")
+    for algo in ["Hexadecimal", "Base64", "Base32", "Base58", "Binary", "UUEncode"]:
+        codec_set(page, "Encode", algo, text)
+        if algo in expected:
+            expect(codec_output(page)).to_have_text(expected[algo])
+        else:
+            expect(codec_output(page)).not_to_have_text("")
+        page.get_by_role("button", name="Swap").click()
+        expect(page.locator("select")).to_have_value(algo)
+        expect(codec_output(page)).to_have_text(text)
+    no_errors(page)
+
+
+@test
+def codec_auto_detect(c: Ctx):
+    page = c.page("/webutils/encoder-decoder.html")
+    cases = [
+        ("aGVsbG8gd29ybGQ=", "Base64", "hello world"),
+        ("68656c6c6f", "Hexadecimal", "hello"),
+        ("NBSWY3DP", "Base32", "hello"),
+        ("hello%20world", "URL Encoding", "hello world"),
+        # plain words used to be "decoded" as Base32 garbage
+        ("uryyb", "ROT13", "hello"),
+        ("hello", "ROT13", "uryyb"),
+    ]
+    for encoded, fmt, decoded in cases:
+        codec_set(page, "Decode", "Auto", encoded)
+        expect(codec_output(page)).to_have_text(decoded)
+        expect(page.get_by_text(f"Decoded Output ({fmt})")).to_be_visible()
+    no_errors(page)
+
+
+@test
+def codec_hashes(c: Ctx):
+    """CryptoJS was replaced by Web Crypto + inline MD5; also check file://."""
+    vectors = {
+        "MD5": "900150983cd24fb0d6963f7d28e17f72",
+        "SHA-1": "a9993e364706816aba3e25717850c26c9cd0d89d",
+        "SHA-256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    }
+    for url in ["/webutils/encoder-decoder.html", (ROOT / "webutils" / "encoder-decoder.html").as_uri()]:
+        page = c.page(url)
+        for algo, digest in vectors.items():
+            codec_set(page, "Hash", algo, "abc")
+            expect(codec_output(page)).to_have_text(digest)
+        no_errors(page)
+        page.context.close()
+
+
+@test
+def codec_share_link_wins_over_saved_state(c: Ctx):
+    stale = {"stringcodec-input": "stale", "stringcodec-mode": "encode", "stringcodec-algo": "Hexadecimal"}
+    for query in ["#mode=decode&algo=Base64&text=aGk%3D", "?mode=decode&algo=Base64&text=aGk%3D"]:
+        page = c.page("/webutils/encoder-decoder.html" + query, storage=stale)
+        expect(codec_output(page)).to_have_text("hi")
+        no_errors(page)
+        page.context.close()
+
+
+@test
+def codec_share_link_uses_fragment_and_input_is_session_only(c: Ctx):
+    page = c.page("/webutils/encoder-decoder.html")
+    codec_set(page, "Encode", "Base64", "secret")
+    page.get_by_role("button", name="Share Link").click()
+    link = page.evaluate("navigator.clipboard.readText()")
+    assert "#mode=encode&algo=Base64&text=secret" in link and "?" not in link, link
+    assert page.evaluate("localStorage.getItem('stringcodec-input')") is None
+    assert page.evaluate("sessionStorage.getItem('stringcodec-input')") == "secret"
+    page.reload()
+    expect(codec_output(page)).to_have_text("c2VjcmV0")
+    no_errors(page)
+
+
 # --- PDF scanner -------------------------------------------------------------
 
 def make_pdf(pages):

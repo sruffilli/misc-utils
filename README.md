@@ -11,7 +11,7 @@ High-performance document scanner simulation. Add tilt, blur, grain, and thresho
 Split, join, and visualize IPv4 subnets effortlessly. Light-themed, responsive dashboard with real-time math.
 
 ### 🔤 [String Codec](./webutils/encoder-decoder.html)
-Universal local utility to safely encode, decode, and hash text using formats like Base64, Base32, Base58, Hexadecimal, Binary, UUEncode, URL Encoding, and ROT13. Includes robust cryptographic checksum algorithms (MD5, SHA-1, SHA-256, SHA-512) via CryptoJS and intelligent auto-detection for decoding payloads.
+Universal local utility to safely encode, decode, and hash text using formats like Base64, Base32, Base58, Hexadecimal, Binary, UUEncode, URL Encoding, and ROT13. All byte codecs work on UTF-8, so non-ASCII text round-trips. Includes MD5, SHA-1, SHA-256 and SHA-512 checksums (Web Crypto, no external library) and auto-detection for decoding payloads. Share links keep the text in the URL fragment, which is never sent to the server; typed input is kept only for the current tab session.
 
 ### 🕸️ [CIDR Aggregator](./webutils/cidr-aggregator.html)
 A single-file visual utility to safely and optimally aggregate massive sets of IP addresses and subnets into their minimal corresponding CIDR blocks.

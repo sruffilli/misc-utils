@@ -31,6 +31,7 @@ When agents create or modify UI applications in this repository, they MUST adher
 - **Pin exact versions** of every CDN dependency. No floating tags (`@latest`, `react@19`, bare `cdn.tailwindcss.com`).
 - **Subresource Integrity** where the CDN allows it: static files on cdnjs get `integrity="sha384-..." crossorigin="anonymous"` on `<script>`, or an `"integrity"` entry in the import map for ES modules. Compute the hash with `curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A`. Two exceptions, because their bytes are not stable: esm.sh (serves per-browser builds) and the Tailwind Play CDN (no CORS headers).
 - **Every tool ships a CSP `<meta>` tag** with `default-src 'none'` and `connect-src 'none'`. This makes the README's promise enforceable: even a compromised dependency cannot `fetch`, XHR, WebSocket or beacon your data out. Allow only the script origins the tool actually uses. `tests/smoke_test.py` checks that `fetch` is blocked on every page.
+- **Share links put state in the URL fragment (`#...`)**, never the query string: the fragment is not sent to the server and does not leak through the `Referer` header. Keep reading legacy `?` parameters so old links still work.
 
 ### 4. Independence & Portability
 - **Self-Contained Files**: Every tool must be a completely standalone HTML file. Do not reference local CSS, JS, or image files.

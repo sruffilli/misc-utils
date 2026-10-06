@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Enforces "your data never leaves the browser": no fetch/XHR/WebSocket/beacon, no forms,
        scripts only from the pinned CDNs below. See AGENTS.md before relaxing it. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://esm.sh https://cdn.tailwindcss.com https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://esm.sh https://cdn.tailwindcss.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
   <title>String Encoder & Decoder</title>
 
   <!-- Import Map for Bare Module Resolution -->
@@ -47,8 +47,6 @@
     }
   </style>
 
-  <!-- CryptoJS for Hashing Algorithms -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 </head>
 
 <body class="bg-gray-50 h-screen flex flex-col overflow-hidden text-gray-800">
@@ -104,6 +102,23 @@
     };
 
     // --- Conversion Utilities ---
+    // Every byte-oriented codec works on UTF-8 bytes, so non-ASCII text
+    // round-trips. Decoded bytes are read as UTF-8; byte sequences that are
+    // not valid UTF-8 (binary payloads) fall back to one character per byte.
+
+    const utf8 = new TextEncoder();
+    const toBytes = (str) => utf8.encode(str);
+    const fromBytes = (bytes) => {
+      try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch (e) {
+        return Array.from(bytes, (b) => String.fromCharCode(b)).join('');
+      }
+    };
+    const isUtf8 = (bytes) => {
+      try { new TextDecoder('utf-8', { fatal: true }).decode(bytes); return true; }
+      catch (e) { return false; }
+    };
 
     const rot13 = (str) => {
       return str.replace(/[a-zA-Z]/g, function (c) {
@@ -113,15 +128,19 @@
       });
     };
 
-    const base64Encode = (str) => {
-      try { return btoa(unescape(encodeURIComponent(str))); }
-      catch (e) { throw new Error("Invalid string for Base64 encoding."); }
+    const base64EncodeBytes = (bytes) => {
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      return btoa(bin);
     };
-
-    const base64Decode = (str) => {
-      try { return decodeURIComponent(escape(atob(str))); }
+    const base64DecodeBytes = (str) => {
+      let bin;
+      try { bin = atob(str.replace(/\s+/g, '')); }
       catch (e) { throw new Error("Invalid Base64 sequence."); }
+      return Uint8Array.from(bin, (c) => c.charCodeAt(0));
     };
+    const base64Encode = (str) => base64EncodeBytes(toBytes(str));
+    const base64Decode = (str) => fromBytes(base64DecodeBytes(str));
 
     const uriEncode = (str) => encodeURIComponent(str);
 
@@ -130,101 +149,78 @@
       catch (e) { throw new Error("Invalid URL Encoding."); }
     };
 
-    const uuEncode = (str) => {
-      if (!str) return "";
+    const uuEncodeBytes = (bytes) => {
+      if (!bytes.length) return "";
+      const toChar = (val) => (val === 0 ? '`' : String.fromCharCode(val + 32));
       let out = "begin 644 string.txt\n";
-      const toChar = (val) => {
-        const c = val + 32;
-        return c === 32 ? '`' : String.fromCharCode(c);
-      };
-      
-      for (let i = 0; i < str.length; i += 45) {
-        let chunk = str.slice(i, i + 45);
+      for (let i = 0; i < bytes.length; i += 45) {
+        const chunk = bytes.subarray(i, i + 45);
         out += toChar(chunk.length);
         for (let j = 0; j < chunk.length; j += 3) {
-          let n = (chunk.charCodeAt(j) << 16) | ((chunk.charCodeAt(j + 1) || 0) << 8) | (chunk.charCodeAt(j + 2) || 0);
-          out += toChar((n >> 18) & 63) +
-                 toChar((n >> 12) & 63) +
-                 toChar((n >> 6) & 63) +
-                 toChar(n & 63);
+          const n = (chunk[j] << 16) | ((chunk[j + 1] || 0) << 8) | (chunk[j + 2] || 0);
+          out += toChar((n >> 18) & 63) + toChar((n >> 12) & 63) + toChar((n >> 6) & 63) + toChar(n & 63);
         }
         out += "\n";
       }
-      out += "\`\nend\n";
-      return out;
+      return out + "`\nend\n";
     };
-
-    const uuDecode = (str) => {
-      let lines = str.split("\n");
-      let out = "";
-      let valid = false;
-      
-      const fromChar = (c) => {
-        let val = c.charCodeAt(0);
-        return (val === 96 ? 0 : val - 32) & 63;
-      };
-
-      for (let line of lines) {
-        line = line.trimEnd();
-        if (line.startsWith("begin") || line.startsWith("end") || line === "\`" || line === "") {
-          if (line.startsWith("end")) valid = true;
-          continue;
-        }
-        let lenChar = line.charCodeAt(0);
-        let len = (lenChar === 96 ? 0 : lenChar - 32);
-        if (len <= 0) break;
-        
-        for (let i = 1; i < line.length; i += 4) {
-          let c1 = fromChar(line[i] || ' ');
-          let c2 = fromChar(line[i + 1] || ' ');
-          let c3 = fromChar(line[i + 2] || ' ');
-          let c4 = fromChar(line[i + 3] || ' ');
-          
-          let n = (c1 << 18) | (c2 << 12) | (c3 << 6) | c4;
-          out += String.fromCharCode((n >> 16) & 255);
-          if (--len > 0) out += String.fromCharCode((n >> 8) & 255);
-          if (--len > 0) out += String.fromCharCode(n & 255);
-          if (--len === 0) break;
+    const uuDecodeBytes = (str) => {
+      const fromChar = (c) => ((c === '`' ? 0 : c.charCodeAt(0) - 32) & 63);
+      const out = [];
+      let sawBegin = false;
+      let sawEnd = false;
+      for (let line of str.split("\n")) {
+        line = line.replace(/\r$/, '');
+        if (line.startsWith("begin ")) { sawBegin = true; continue; }
+        if (line.trim() === "end") { sawEnd = true; break; }
+        if (line === "" || line === "`") continue;
+        let len = fromChar(line[0]);
+        if (len <= 0) continue;
+        for (let i = 1; len > 0; i += 4) {
+          const n = (fromChar(line[i] || ' ') << 18) | (fromChar(line[i + 1] || ' ') << 12) |
+                    (fromChar(line[i + 2] || ' ') << 6) | fromChar(line[i + 3] || ' ');
+          out.push((n >> 16) & 255);
+          if (--len > 0) out.push((n >> 8) & 255);
+          if (--len > 0) out.push(n & 255);
+          len--;
         }
       }
-      if (!valid && out === "") throw new Error("Invalid UUEncode format.");
-      return out;
+      if (!sawBegin || !sawEnd) throw new Error("Invalid UUEncode format.");
+      return Uint8Array.from(out);
     };
+    const uuEncode = (str) => uuEncodeBytes(toBytes(str));
+    const uuDecode = (str) => fromBytes(uuDecodeBytes(str));
 
-    // --- Additional Conversions ---
-    const hexEncode = (str) => {
-      return Array.from(str).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
-    };
-    const hexDecode = (str) => {
-      str = str.replace(/[^0-9A-Fa-f]/g, '');
+    const hexEncode = (str) => Array.from(toBytes(str), (b) => b.toString(16).padStart(2, '0')).join('');
+    const hexDecodeBytes = (str) => {
+      str = str.replace(/\s+/g, '').replace(/^0x/i, '');
+      if (/[^0-9A-Fa-f]/.test(str)) throw new Error("Invalid Hex character.");
       if (str.length % 2 !== 0) throw new Error("Invalid Hex string length.");
-      let res = '';
-      for (let i = 0; i < str.length; i += 2) {
-        res += String.fromCharCode(parseInt(str.substring(i, i + 2), 16));
-      }
-      return res;
+      const out = new Uint8Array(str.length / 2);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(str.substr(i * 2, 2), 16);
+      return out;
     };
+    const hexDecode = (str) => fromBytes(hexDecodeBytes(str));
 
-    const binEncode = (str) => {
-      return Array.from(str).map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join(' ');
-    };
-    const binDecode = (str) => {
-      str = str.replace(/[^01]/g, '');
+    const binEncode = (str) => Array.from(toBytes(str), (b) => b.toString(2).padStart(8, '0')).join(' ');
+    const binDecodeBytes = (str) => {
+      str = str.replace(/\s+/g, '');
+      if (/[^01]/.test(str)) throw new Error("Invalid Binary character.");
       if (str.length % 8 !== 0) throw new Error("Invalid Binary string length.");
-      let res = '';
-      for (let i = 0; i < str.length; i += 8) {
-        res += String.fromCharCode(parseInt(str.substring(i, i + 8), 2));
-      }
-      return res;
+      const out = new Uint8Array(str.length / 8);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(str.substr(i * 8, 8), 2);
+      return out;
     };
+    const binDecode = (str) => fromBytes(binDecodeBytes(str));
 
     const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
     const base32Encode = (str) => {
+      const bytes = toBytes(str);
       let result = "";
       let bits = 0;
       let value = 0;
-      for (let i = 0; i < str.length; i++) {
-        value = (value << 8) | str.charCodeAt(i);
+      for (const byte of bytes) {
+        value = ((value << 8) | byte) & 0xffff;
         bits += 8;
         while (bits >= 5) {
           result += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
@@ -235,106 +231,141 @@
       while (result.length % 8 !== 0) result += "=";
       return result;
     };
-    const base32Decode = (str) => {
-      str = str.replace(/=+$/, "").toUpperCase();
-      let result = "";
+    const base32DecodeBytes = (str) => {
+      str = str.replace(/\s+/g, '').replace(/=+$/, "").toUpperCase();
+      const out = [];
       let bits = 0;
       let value = 0;
-      for (let i = 0; i < str.length; i++) {
-        let val = BASE32_ALPHABET.indexOf(str[i]);
+      for (const ch of str) {
+        const val = BASE32_ALPHABET.indexOf(ch);
         if (val === -1) throw new Error("Invalid Base32 character.");
-        value = (value << 5) | val;
+        value = ((value << 5) | val) & 0xffff;
         bits += 5;
         if (bits >= 8) {
-          result += String.fromCharCode((value >>> (bits - 8)) & 255);
+          out.push((value >>> (bits - 8)) & 255);
           bits -= 8;
         }
       }
-      return result;
+      return Uint8Array.from(out);
     };
+    const base32Decode = (str) => fromBytes(base32DecodeBytes(str));
 
     const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    const BASE58_MAP = Object.fromEntries([...BASE58_ALPHABET].map((c, i) => [c, i]));
     const base58Encode = (str) => {
-      if (!str.length) return '';
-      const bytes = Array.from(str).map(c => c.charCodeAt(0));
-      const digits = [0];
-      for (let i = 0; i < bytes.length; i++) {
-        for (let j = 0; j < digits.length; j++) digits[j] <<= 8;
-        digits[0] += bytes[i];
-        let carry = 0;
-        for (let j = 0; j < digits.length; ++j) {
-          digits[j] += carry;
-          carry = (digits[j] / 58) | 0;
-          digits[j] %= 58;
-        }
-        while (carry) {
-          digits.push(carry % 58);
+      const bytes = toBytes(str);
+      const digits = [];
+      for (const byte of bytes) {
+        let carry = byte;
+        for (let j = 0; j < digits.length; j++) {
+          carry += digits[j] << 8;
+          digits[j] = carry % 58;
           carry = (carry / 58) | 0;
         }
+        while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
       }
-      for (let i = 0; str[i] === '\x00' && i < str.length - 1; i++) digits.push(0);
-      return digits.reverse().map(digit => BASE58_ALPHABET[digit]).join('');
+      let zeros = 0;
+      while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+      return '1'.repeat(zeros) + digits.reverse().map((d) => BASE58_ALPHABET[d]).join('');
     };
-    const base58Decode = (str) => {
-      if (!str.length) return '';
-      const bytes = [0];
-      for (let i = 0; i < str.length; i++) {
-        const c = str[i];
-        if (!(c in Object.fromEntries([...BASE58_ALPHABET].map((c, i) => [c, i])))) throw new Error('Invalid Base58 character');
-        for (let j = 0; j < bytes.length; j++) bytes[j] *= 58;
-        bytes[0] += BASE58_ALPHABET.indexOf(c);
-        let carry = 0;
-        for (let j = 0; j < bytes.length; ++j) {
-          bytes[j] += carry;
-          carry = bytes[j] >> 8;
-          bytes[j] &= 0xff;
-        }
-        while (carry) {
-          bytes.push(carry & 0xff);
+    const base58DecodeBytes = (str) => {
+      str = str.trim();
+      const bytes = [];
+      for (const c of str) {
+        if (!(c in BASE58_MAP)) throw new Error('Invalid Base58 character.');
+        let carry = BASE58_MAP[c];
+        for (let j = 0; j < bytes.length; j++) {
+          carry += bytes[j] * 58;
+          bytes[j] = carry & 0xff;
           carry >>= 8;
         }
+        while (carry) { bytes.push(carry & 0xff); carry >>= 8; }
       }
-      for (let i = 0; str[i] === '1' && i < str.length - 1; i++) bytes.push(0);
-      return bytes.reverse().map(byte => String.fromCharCode(byte)).join('');
+      let zeros = 0;
+      while (zeros < str.length && str[zeros] === '1') zeros++;
+      return Uint8Array.from([...new Array(zeros).fill(0), ...bytes.reverse()]);
+    };
+    const base58Decode = (str) => fromBytes(base58DecodeBytes(str));
+
+    // --- Hashing (Web Crypto for SHA, inline MD5: Web Crypto has no MD5) ---
+
+    const toHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+    const md5 = (bytes) => {
+      const K = new Uint32Array(64);
+      for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 2 ** 32);
+      const S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+      const len = bytes.length;
+      const padded = new Uint8Array((((len + 8) >> 6) + 1) << 6);
+      padded.set(bytes);
+      padded[len] = 0x80;
+      const view = new DataView(padded.buffer);
+      view.setUint32(padded.length - 8, (len * 8) >>> 0, true);
+      view.setUint32(padded.length - 4, Math.floor(len / 0x20000000), true);
+      let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+      const M = new Uint32Array(16);
+      for (let off = 0; off < padded.length; off += 64) {
+        for (let i = 0; i < 16; i++) M[i] = view.getUint32(off + i * 4, true);
+        let A = a0, B = b0, C = c0, D = d0;
+        for (let i = 0; i < 64; i++) {
+          let F, g;
+          if (i < 16) { F = (B & C) | (~B & D); g = i; }
+          else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
+          else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) % 16; }
+          else { F = C ^ (B | ~D); g = (7 * i) % 16; }
+          const s = S[(i >> 4) * 4 + (i % 4)];
+          F = (F + A + K[i] + M[g]) >>> 0;
+          A = D; D = C; C = B;
+          B = (B + ((F << s) | (F >>> (32 - s)))) >>> 0;
+        }
+        a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+      }
+      const out = new DataView(new ArrayBuffer(16));
+      [a0, b0, c0, d0].forEach((v, i) => out.setUint32(i * 4, v, true));
+      return toHex(new Uint8Array(out.buffer));
+    };
+
+    const HASH_ALGOS = ['MD5', 'SHA-1', 'SHA-256', 'SHA-512'];
+    const hashText = async (algo, str) => {
+      const bytes = toBytes(str);
+      if (algo === 'MD5') return md5(bytes);
+      if (!(globalThis.crypto && crypto.subtle)) {
+        throw new Error("SHA hashing needs a secure context: open the page over https or as a local file.");
+      }
+      return toHex(new Uint8Array(await crypto.subtle.digest(algo, bytes)));
+    };
+
+    // --- Auto-detection ---
+    // A candidate decoding is accepted only if it yields valid UTF-8 text
+    // with no control characters, so plain words are not "decoded" into
+    // binary garbage by permissive alphabets like Base32 and Base58.
+
+    const looksLikeText = (bytes) => {
+      if (!bytes.length || !isUtf8(bytes)) return false;
+      const text = fromBytes(bytes);
+      return !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(text);
     };
 
     const autoDecode = (str) => {
-      if (!str.trim()) return { decoded: "", format: "Auto" };
+      const s = str.trim();
+      if (!s) return { decoded: "", format: "Auto" };
 
-      if (str.includes("begin ") && str.includes("end")) {
-        try { return { decoded: uuDecode(str), format: "UUEncode" }; } catch (e) { }
-      }
-
-      if (/^[01\s]+$/.test(str.trim()) && str.replace(/[^01]/g, '').length > 0 && str.replace(/[^01]/g, '').length % 8 === 0) {
-        try { return { decoded: binDecode(str), format: "Binary" }; } catch (e) { }
-      }
-
-      if (/^[0-9a-fA-F]+$/.test(str.trim()) && str.trim().length % 2 === 0) {
+      const candidates = [
+        ['UUEncode', () => /^begin \d{3} /m.test(s) && /^end\s*$/m.test(s) && uuDecodeBytes(s)],
+        ['Binary', () => /^[01\s]+$/.test(s) && binDecodeBytes(s)],
+        ['Hexadecimal', () => /^(0x)?[0-9a-fA-F\s]+$/.test(s) && hexDecodeBytes(s)],
+        ['Base64', () => /^[A-Za-z0-9+/\s]+={0,2}$/.test(s) && s.replace(/\s+/g, '').length % 4 === 0 && base64DecodeBytes(s)],
+        ['Base32', () => /^[A-Z2-7]+=*$/.test(s) && base32DecodeBytes(s)],
+        ['Base58', () => /^[1-9A-HJ-NP-Za-km-z]+$/.test(s) && base58DecodeBytes(s)],
+      ];
+      for (const [format, attempt] of candidates) {
         try {
-          const decoded = hexDecode(str.trim());
-          if (/^[\x20-\x7E\s]*$/.test(decoded) && decoded !== '') return { decoded, format: "Hexadecimal" };
+          const bytes = attempt();
+          if (bytes && looksLikeText(bytes)) return { decoded: fromBytes(bytes), format };
         } catch (e) { }
       }
 
-      const b64Regex = /^(?:[A-Za-z0-9+/]{4})*(?:(?:[A-Za-z0-9+/]{3}=)|(?:[A-Za-z0-9+/]{2}==))?$/;
-      if (b64Regex.test(str.trim()) && str.trim().length > 0 && !str.includes(' ')) {
-        try {
-          const decoded = base64Decode(str);
-          if (/^[\x20-\x7E\s\w\W]*$/.test(decoded)) return { decoded, format: "Base64" };
-        } catch (e) { }
-      }
-
-      const b32Regex = /^[A-Z2-7]+=*$/i;
-      if (b32Regex.test(str.trim())) {
-        try { return { decoded: base32Decode(str.trim()), format: "Base32" }; } catch (e) { }
-      }
-
-      try {
-        const decoded = base58Decode(str.trim());
-        if (/^[\x20-\x7E\s\w\W]*$/.test(decoded)) return { decoded, format: "Base58" };
-      } catch (e) { }
-
-      if (str.includes("%")) {
+      if (/%[0-9A-Fa-f]{2}/.test(str)) {
         try { return { decoded: uriDecode(str), format: "URL Encoding" }; } catch (e) { }
       }
 
@@ -360,27 +391,63 @@
       "It's not obfuscation, it's *vibes*"
     ];
 
+    const MODES = ['encode', 'decode', 'hash'];
+    const CODECS = ['Base64', 'Base32', 'Base58', 'Binary', 'Hexadecimal', 'ROT13', 'ROT26', 'URL', 'UUEncode'];
+    const algosFor = (mode) => (mode === 'hash' ? HASH_ALGOS : mode === 'decode' ? ['Auto', ...CODECS] : CODECS);
+
+    const ENCODERS = {
+      Base64: base64Encode, Base32: base32Encode, Base58: base58Encode, Hexadecimal: hexEncode,
+      Binary: binEncode, UUEncode: uuEncode, ROT13: rot13, ROT26: (s) => s, URL: uriEncode,
+    };
+    const DECODERS = {
+      Base64: base64Decode, Base32: base32Decode, Base58: base58Decode, Hexadecimal: hexDecode,
+      Binary: binDecode, UUEncode: uuDecode, ROT13: rot13, ROT26: (s) => s, URL: uriDecode,
+    };
+
+    // Share links carry state in the URL fragment, which never reaches the
+    // server. Legacy ?query links are still read.
+    const readLinkParams = () => {
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      return hash.has('mode') || hash.has('text') ? hash : new URLSearchParams(window.location.search);
+    };
+
+    // The input text lives in sessionStorage: it survives a reload but not
+    // closing the tab, so a pasted token does not linger on disk forever.
+    const INPUT_KEY = 'stringcodec-input';
+
+    const initialState = () => {
+      const link = readLinkParams();
+      const fromLink = link.has('mode') || link.has('text');
+      let mode = (fromLink ? link.get('mode') : localStorage.getItem('stringcodec-mode')) || 'encode';
+      if (!MODES.includes(mode)) mode = 'encode';
+      let encoding = (fromLink ? link.get('algo') : localStorage.getItem('stringcodec-algo')) || '';
+      if (!algosFor(mode).includes(encoding)) encoding = algosFor(mode)[mode === 'hash' ? 2 : 0];
+      const input = (fromLink ? link.get('text') : sessionStorage.getItem(INPUT_KEY)) || '';
+      localStorage.removeItem(INPUT_KEY); // written by older versions
+      return { mode, encoding, input };
+    };
+
+    const transform = async (mode, encoding, input) => {
+      if (mode === 'hash') return { output: await hashText(encoding, input), format: '' };
+      if (mode === 'decode' && encoding === 'Auto') {
+        const auto = autoDecode(input);
+        return { output: auto.decoded, format: auto.format };
+      }
+      const fn = (mode === 'decode' ? DECODERS : ENCODERS)[encoding];
+      if (!fn) throw new Error(`Unknown format: ${encoding}`);
+      return { output: fn(input), format: '' };
+    };
+
     function App() {
-      const initParams = new URLSearchParams(window.location.search);
-
+      const [initial] = useState(initialState);
       const [pun] = useState(() => PUNS[Math.floor(Math.random() * PUNS.length)]);
-      const [input, setInput] = useState(() => {
-        const saved = localStorage.getItem('stringcodec-input');
-        return saved || initParams.get('text') || '';
-      });
+      const [input, setInput] = useState(initial.input);
       const [output, setOutput] = useState('');
-      const [mode, setMode] = useState(() => {
-        const saved = localStorage.getItem('stringcodec-mode');
-        return saved || initParams.get('mode') || 'encode';
-      });
-      const [encoding, setEncoding] = useState(() => {
-        const saved = localStorage.getItem('stringcodec-algo');
-        return saved || initParams.get('algo') || 'Base64';
-      });
+      const [mode, setMode] = useState(initial.mode);
+      const [encoding, setEncoding] = useState(initial.encoding);
 
-      // Persist to localStorage
       useEffect(() => {
-        localStorage.setItem('stringcodec-input', input);
+        sessionStorage.setItem(INPUT_KEY, input);
         localStorage.setItem('stringcodec-mode', mode);
         localStorage.setItem('stringcodec-algo', encoding);
       }, [input, mode, encoding]);
@@ -391,59 +458,31 @@
       const [toastMessage, setToastMessage] = useState('');
       const [detectedFormat, setDetectedFormat] = useState('');
 
-      const handleUpdate = () => {
+      // Recompute on every change. Hashing is async (Web Crypto), so a slow
+      // result for stale input must not overwrite a newer one.
+      useEffect(() => {
+        let current = true;
         if (!input) {
           setOutput('');
           setError('');
           setDetectedFormat('');
           return;
         }
-
-        try {
-          setError('');
-          let res = '';
-          setDetectedFormat('');
-          if (mode === 'encode') {
-            if (encoding === 'Base64') res = base64Encode(input);
-            else if (encoding === 'Base32') res = base32Encode(input);
-            else if (encoding === 'Base58') res = base58Encode(input);
-            else if (encoding === 'Hexadecimal') res = hexEncode(input);
-            else if (encoding === 'Binary') res = binEncode(input);
-            else if (encoding === 'UUEncode') res = uuEncode(input);
-            else if (encoding === 'ROT13') res = rot13(input);
-            else if (encoding === 'ROT26') res = input; // ROT26 is just the input
-            else if (encoding === 'URL') res = uriEncode(input);
-          } else if (mode === 'decode') {
-            if (encoding === 'Auto') {
-              const auto = autoDecode(input);
-              res = auto.decoded;
-              setDetectedFormat(auto.format);
-            }
-            else if (encoding === 'Base64') res = base64Decode(input);
-            else if (encoding === 'Base32') res = base32Decode(input);
-            else if (encoding === 'Base58') res = base58Decode(input);
-            else if (encoding === 'Hexadecimal') res = hexDecode(input);
-            else if (encoding === 'Binary') res = binDecode(input);
-            else if (encoding === 'UUEncode') res = uuDecode(input);
-            else if (encoding === 'ROT13') res = rot13(input);
-            else if (encoding === 'ROT26') res = input; // ROT26 is just the input
-            else if (encoding === 'URL') res = uriDecode(input);
-          } else if (mode === 'hash') {
-            if (encoding === 'MD5') res = CryptoJS.MD5(input).toString(CryptoJS.enc.Hex);
-            else if (encoding === 'SHA-1') res = CryptoJS.SHA1(input).toString(CryptoJS.enc.Hex);
-            else if (encoding === 'SHA-256') res = CryptoJS.SHA256(input).toString(CryptoJS.enc.Hex);
-            else if (encoding === 'SHA-512') res = CryptoJS.SHA512(input).toString(CryptoJS.enc.Hex);
-          }
-          setOutput(res);
-        } catch (e) {
-          setError(e.message);
-          setOutput('');
-        }
-      };
-
-      // Re-render when input or modes change
-      useEffect(() => {
-        handleUpdate();
+        transform(mode, encoding, input).then(
+          ({ output, format }) => {
+            if (!current) return;
+            setError('');
+            setOutput(output);
+            setDetectedFormat(format);
+          },
+          (e) => {
+            if (!current) return;
+            setError(e.message);
+            setOutput('');
+            setDetectedFormat('');
+          },
+        );
+        return () => { current = false; };
       }, [input, mode, encoding]);
 
       useEffect(() => {
@@ -483,13 +522,9 @@
 
       const copyLink = () => {
         try {
-          const urlObj = new URL(window.location.href);
-          urlObj.searchParams.set('mode', mode);
-          urlObj.searchParams.set('algo', encoding);
-          if (input) urlObj.searchParams.set('text', input);
-          else urlObj.searchParams.delete('text');
-          
-          const newUrl = urlObj.toString();
+          const params = new URLSearchParams({ mode, algo: encoding });
+          if (input) params.set('text', input);
+          const newUrl = `${window.location.href.split(/[?#]/)[0]}#${params}`;
           copyToClipboard(newUrl, setCopiedLink);
           try { window.history.replaceState({}, '', newUrl); } catch(e) { }
         } catch (err) {
