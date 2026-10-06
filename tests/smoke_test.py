@@ -205,6 +205,33 @@ def aggregator_merges(c: Ctx):
     no_errors(page)
 
 
+@test
+def aggregator_rejects_malformed_tokens(c: Ctx):
+    page = c.page("/webutils/cidr-aggregator.html")
+    page.locator("textarea").fill("10.0.0.1abc 10.0.0.0/24xyz 1.2.3.4/32/9 1.2.3.4/33 256.1.1.1 10.0.0.0/8")
+    for bad in ["10.0.0.1abc", "10.0.0.0/24xyz", "1.2.3.4/32/9", "256.1.1.1"]:
+        expect(page.get_by_text(f"Invalid IP or CIDR: {bad}")).to_be_visible()
+    expect(page.get_by_text("Invalid mask: 1.2.3.4/33")).to_be_visible()
+    expect(page.locator("a[title='Visualize in Subnet Calculator']")).to_have_text(["10.0.0.0/8"])
+    no_errors(page)
+
+
+@test
+def aggregator_links(c: Ctx):
+    stale = {"cidr-aggregator-input": "1.1.1.1"}
+    # new fragment links and legacy double-encoded ?q= links both win over saved input
+    for link in ["#q=10.0.0.0%2F25%0A10.0.0.128%2F25", "?q=10.0.0.0%252F25%250A10.0.0.128%252F25"]:
+        page = c.page("/webutils/cidr-aggregator.html" + link, storage=stale)
+        results = page.locator("a[title='Visualize in Subnet Calculator']")
+        expect(results).to_have_text(["10.0.0.0/24"])
+        assert "?" not in page.url and "#q=" in page.url, page.url
+        results.first.click()
+        expect(page.get_by_role("textbox").first).to_have_value("10.0.0.0")
+        expect(page.locator("input[type=number]").first).to_have_value("24")
+        no_errors(page)
+        page.context.close()
+
+
 # --- encoder / decoder --------------------------------------------------------
 
 def codec_output(page: Page):

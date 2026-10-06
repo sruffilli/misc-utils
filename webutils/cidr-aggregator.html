@@ -116,6 +116,9 @@
       ].join('.');
     };
 
+    // An IPv4 address with an optional /0-32 prefix, nothing else.
+    const CIDR_RE = /^((?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))(?:\/(\d{1,2}))?$/;
+
     const parseCIDRs = (inputText) => {
       const tokens = inputText.split(/[\s,]+/);
       const ranges = [];
@@ -124,27 +127,34 @@
       for (let token of tokens) {
         if (!token) continue;
 
-        let [ipStr, cidrStr] = token.split('/');
-        let cidr = cidrStr !== undefined ? parseInt(cidrStr, 10) : 32;
-
-        if (isNaN(cidr) || cidr < 0 || cidr > 32) {
+        const m = CIDR_RE.exec(token);
+        if (!m) {
+          errors.push(`Invalid IP or CIDR: ${token}`);
+          continue;
+        }
+        const cidr = m[2] !== undefined ? parseInt(m[2], 10) : 32;
+        if (cidr > 32) {
           errors.push(`Invalid mask: ${token}`);
           continue;
         }
 
-        const ipParts = ipStr.split('.');
-        if (ipParts.length !== 4 || ipParts.some(p => p === '' || isNaN(parseInt(p, 10)) || parseInt(p, 10) < 0 || parseInt(p, 10) > 255)) {
-          errors.push(`Invalid IP: ${token}`);
-          continue;
-        }
-
-        const start = ip2long(ipStr);
+        const start = ip2long(m[1]);
         const size = Math.pow(2, 32 - cidr);
         const network = start - (start % size);
         const broadcast = network + size - 1;
         ranges.push({ start: network, end: broadcast, original: token });
       }
       return { ranges, errors };
+    };
+
+    // Share links carry the input in the URL fragment, which never reaches
+    // the server. Legacy ?q= links (double-encoded) are still read.
+    const readLinkInput = () => {
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      if (hash.has('q')) return hash.get('q');
+      const legacy = new URLSearchParams(window.location.search).get('q');
+      if (legacy === null) return null;
+      try { return decodeURIComponent(legacy); } catch (e) { return legacy; }
     };
 
     const aggregateCIDRs = (ranges) => {
@@ -205,10 +215,8 @@
         document.title = `CIDR Aggregator - ${pun}`;
       }, [pun]);
 
-      const [input, setInput] = useState(() => {
-        const saved = localStorage.getItem('cidr-aggregator-input');
-        return saved || '';
-      });
+      // A share link wins over the saved input.
+      const [input, setInput] = useState(() => readLinkInput() ?? localStorage.getItem('cidr-aggregator-input') ?? '');
       const [copiedLink, setCopiedLink] = useState(false);
       const [copiedResults, setCopiedResults] = useState(false);
 
@@ -217,26 +225,14 @@
         localStorage.setItem('cidr-aggregator-input', input);
       }, [input]);
 
-      // Load from URL on mount (URL takes precedence over localStorage)
-      useEffect(() => {
-        try {
-          const params = new URLSearchParams(window.location.search);
-          const q = params.get('q');
-          if (q) {
-            setInput(decodeURIComponent(q));
-          }
-        } catch (e) {
-          console.warn('Failed to parse URL parameters:', e);
-        }
-      }, []);
-
       // Sync to URL when state changes
       useEffect(() => {
         const params = new URLSearchParams();
         if (input.trim()) {
-          params.set('q', encodeURIComponent(input));
+          params.set('q', input);
         }
-        const newUrl = `${window.location.pathname}?${params.toString()}`;
+        const query = params.toString();
+        const newUrl = query ? `${window.location.pathname}#${query}` : window.location.pathname;
 
         try {
           window.history.replaceState(null, '', newUrl);
@@ -274,7 +270,7 @@
       const { ranges, errors } = useMemo(() => parseCIDRs(input), [input]);
       const results = useMemo(() => aggregateCIDRs(ranges), [ranges]);
 
-      const reduction = ranges.length > 0 ? ((1 - (results.length / ranges.length)) * 100).toFixed(1) : 0;
+      const reduction = ranges.length > 0 ? (1 - (results.length / ranges.length)) * 100 : 0;
 
       const loadExample = () => {
         setInput(`192.168.1.0/24\n192.168.2.0/24\n192.168.3.0/24\n192.168.4.0/24\n192.168.0.0/24\n192.168.5.0/24\n10.0.0.5\n10.0.0.6`);
@@ -308,7 +304,7 @@
                 ${copiedLink ? html`<${Icon} name="Check" className="w-4 h-4 text-emerald-600" />` : html`<${Icon} name="LinkIcon" className="w-4 h-4" />`}
                 ${copiedLink ? html`<span className="text-emerald-600">Copied!</span>` : html`<span className="hidden sm:inline">Share Link</span>`}
               </button>
-              <a href="https://github.com/sruffilli/sruffilli.github.io" target="_blank" className="text-gray-400 hover:text-gray-900 transition-colors">
+              <a href="https://github.com/sruffilli/misc-utils/blob/main/webutils/cidr-aggregator.html" target="_blank" className="text-gray-400 hover:text-gray-900 transition-colors">
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.05-.015-2.055-3.33 0-4.035-1.44-4.29-1.875-.15-.36-.75-1.44-1.29-1.725-.435-.24-1.065-.825-.015-.84 1.14-.015 1.95 1.05 2.22 1.485 1.05 1.785 2.76 1.275 3.45.975.105-.75.405-1.275.735-1.575-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.225 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405 1.02 0 2.04.135 3 .405 2.28-1.545 3.285-1.23 3.285-1.23.66 1.695.24 2.925.12 3.225.765.84 1.23 1.92 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.42.36.78 1.095.78 2.205 0 1.59-.015 2.865-.015 3.255 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" /></svg>
               </a>
             </div>
@@ -378,7 +374,7 @@
 
                   ${ranges.length > 0 && reduction > 0 && (
                     html`<div className="hidden sm:flex bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg text-sm font-semibold items-center gap-1.5">
-                      ↓ Reduced by ${reduction}%
+                      ↓ Reduced by ${reduction.toFixed(1)}%
                     </div>`
                   )}
                 </div>
@@ -410,7 +406,7 @@
                           return (
                             html`<a 
                               key=${i} 
-                              href=${`subnet-calculator.html?ip=${ip}&cidr=${cidr || 32}`} 
+                              href=${`subnet-calculator.html#ip=${ip}&cidr=${cidr || 32}`} 
                               className="hover:text-blue-600 hover:bg-blue-50 px-2 py-0.5 rounded transition-colors"
                               title="Visualize in Subnet Calculator"
                             >
