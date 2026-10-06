@@ -65,6 +65,13 @@ def no_errors(page: Page):
     assert not page.errors, "\n".join(page.errors)
 
 
+@test
+def index_is_up_to_date(c: Ctx):
+    import subprocess
+    r = subprocess.run([sys.executable, "scripts/generate_index.py", "--check"], cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr or r.stdout
+
+
 # --- every tool loads cleanly -------------------------------------------------
 
 @test

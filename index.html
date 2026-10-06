@@ -4,21 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web Utilities</title>
-    <meta name="description" content="A collection of single-file, portable web utilities. Your data never leaves the browser. Ever. Unless there's a supply chain attack. In which case, tough luck.">
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <meta name="description" content="A collection of single-file, portable web utilities. Your data never leaves the browser. Ever. Unless there&#x27;s a supply chain attack. In which case, tough luck.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        outfit: ['Outfit', 'sans-serif'],
-                    },
                     colors: {
                         brand: { 500: '#3b82f6', 600: '#2563eb' }
                     }
@@ -27,7 +20,6 @@
         }
     </script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
         .bg-grid {
             background-size: 20px 20px;
             background-image:
@@ -41,11 +33,11 @@
     <main class="flex-1 flex flex-col justify-center items-center px-4 py-16 relative overflow-hidden">
         
         <div class="max-w-4xl w-full text-center mb-12 relative z-10">
-            <h1 class="text-4xl font-extrabold font-outfit mb-3 text-gray-900 tracking-tight">
+            <h1 class="text-4xl font-extrabold mb-3 text-gray-900 tracking-tight">
                 Web Utilities
             </h1>
             <p class="text-lg text-gray-600 max-w-2xl mx-auto">
-                A collection of single-file, portable web utilities. Your data never leaves the browser. Ever. Unless there's a supply chain attack. In which case, tough luck.
+                A collection of single-file, portable web utilities. Your data never leaves the browser. Ever. Unless there&#x27;s a supply chain attack. In which case, tough luck.
             </p>
         </div>
 
@@ -54,7 +46,7 @@
             <a href="./webutils/pdf-scanner.html" class="bg-white border border-gray-200 rounded-xl p-6 flex flex-col justify-between transition-all duration-200 hover:shadow-md hover:border-blue-500 group">
                 <div>
                     <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-xl font-bold font-outfit text-gray-900 group-hover:text-blue-600 transition-colors">
+                        <h2 class="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
                             Scanify Pro
                         </h2>
                         <div class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 group-hover:bg-blue-600 group-hover:text-white transition-all duration-200">
@@ -64,14 +56,14 @@
                         </div>
                     </div>
                     <p class="text-sm text-gray-600 group-hover:text-gray-700 transition-colors leading-relaxed">
-                        High-performance document scanner simulation. Add tilt, blur, grain, and threshold effects to PDFs to simulate real scanner output. Local processing only.
+                        High-performance document scanner simulation. Add tilt, blur, grain, and threshold effects to PDFs to simulate real scanner output, and place signatures. The export keeps every page&#x27;s size and orientation, at a selectable 100 to 300 DPI. Local processing only.
                     </p>
                 </div>
             </a>
             <a href="./webutils/subnet-calculator.html" class="bg-white border border-gray-200 rounded-xl p-6 flex flex-col justify-between transition-all duration-200 hover:shadow-md hover:border-blue-500 group">
                 <div>
                     <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-xl font-bold font-outfit text-gray-900 group-hover:text-blue-600 transition-colors">
+                        <h2 class="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
                             Visual Subnet Calculator
                         </h2>
                         <div class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 group-hover:bg-blue-600 group-hover:text-white transition-all duration-200">
@@ -88,7 +80,7 @@
             <a href="./webutils/encoder-decoder.html" class="bg-white border border-gray-200 rounded-xl p-6 flex flex-col justify-between transition-all duration-200 hover:shadow-md hover:border-blue-500 group">
                 <div>
                     <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-xl font-bold font-outfit text-gray-900 group-hover:text-blue-600 transition-colors">
+                        <h2 class="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
                             String Codec
                         </h2>
                         <div class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 group-hover:bg-blue-600 group-hover:text-white transition-all duration-200">
@@ -98,14 +90,14 @@
                         </div>
                     </div>
                     <p class="text-sm text-gray-600 group-hover:text-gray-700 transition-colors leading-relaxed">
-                        Universal local utility to safely encode, decode, and hash text using formats like Base64, Base32, Base58, Hexadecimal, Binary, UUEncode, URL Encoding, and ROT13. Includes robust cryptographic checksum algorithms (MD5, SHA-1, SHA-256, SHA-512) via CryptoJS and intelligent auto-detection for decoding payloads.
+                        Universal local utility to safely encode, decode, and hash text using formats like Base64, Base32, Base58, Hexadecimal, Binary, UUEncode, URL Encoding, and ROT13. All byte codecs work on UTF-8, so non-ASCII text round-trips. Includes MD5, SHA-1, SHA-256 and SHA-512 checksums (Web Crypto, no external library) and auto-detection for decoding payloads. Share links keep the text in the URL fragment, which is never sent to the server; typed input is kept only for the current tab session.
                     </p>
                 </div>
             </a>
             <a href="./webutils/cidr-aggregator.html" class="bg-white border border-gray-200 rounded-xl p-6 flex flex-col justify-between transition-all duration-200 hover:shadow-md hover:border-blue-500 group">
                 <div>
                     <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-xl font-bold font-outfit text-gray-900 group-hover:text-blue-600 transition-colors">
+                        <h2 class="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
                             CIDR Aggregator
                         </h2>
                         <div class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 group-hover:bg-blue-600 group-hover:text-white transition-all duration-200">
@@ -124,7 +116,7 @@
     </main>
 
     <footer class="py-8 text-center text-xs text-gray-500 border-t border-gray-200 relative z-10 bg-white">
-        <p>&copy; 2026 sruffilli. github.io. Built with passion & AI.</p>
+        <p>&copy; sruffilli. Built with passion &amp; AI.</p>
     </footer>
 
 </body>

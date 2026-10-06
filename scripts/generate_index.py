@@ -1,11 +1,18 @@
+"""Generate index.html from the tool list in README.md.
+
+Run from the repository root: python scripts/generate_index.py
+With --check, write nothing and exit 1 if index.html is out of date (CI).
+"""
+
+import html
 import os
 import re
+import sys
 
 def generate():
     readme_path = os.path.join(os.getcwd(), 'README.md')
     if not os.path.exists(readme_path):
-        print('README.md not found!')
-        return
+        sys.exit('README.md not found! Run from the repository root.')
 
     with open(readme_path, 'r', encoding='utf-8') as f:
         content = f.read()
@@ -26,8 +33,7 @@ def generate():
         elif line.startswith('A collection of'):
             description = line
         elif line.startswith('### '):
-            # Find app title and link
-            # Format: ### 📄 [Scanify Pro](file:///...)
+            # Format: ### 📄 [Scanify Pro](./webutils/pdf-scanner.html)
             match = re.search(r'\[([^\]]+)\]\(([^)]+)\)', line)
             if match:
                 current_app = {
@@ -42,7 +48,7 @@ def generate():
             # Empty line usually ends description
             current_app = None
 
-    # Convert absolute file paths to relative webutils/ paths
+    # Normalise links to ./webutils/<file>, whatever form README uses
     for app in apps:
         basename = os.path.basename(app['link'])
         app['link'] = f'./webutils/{basename}'
@@ -54,20 +60,13 @@ def generate():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title}</title>
     <meta name="description" content="{description}">
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <script>
         tailwind.config = {{
             theme: {{
                 extend: {{
-                    fontFamily: {{
-                        sans: ['Inter', 'sans-serif'],
-                        outfit: ['Outfit', 'sans-serif'],
-                    }},
                     colors: {{
                         brand: {{ 500: '#3b82f6', 600: '#2563eb' }}
                     }}
@@ -76,7 +75,6 @@ def generate():
         }}
     </script>
     <style>
-        body {{ font-family: 'Inter', sans-serif; }}
         .bg-grid {{
             background-size: 20px 20px;
             background-image:
@@ -90,7 +88,7 @@ def generate():
     <main class="flex-1 flex flex-col justify-center items-center px-4 py-16 relative overflow-hidden">
         
         <div class="max-w-4xl w-full text-center mb-12 relative z-10">
-            <h1 class="text-4xl font-extrabold font-outfit mb-3 text-gray-900 tracking-tight">
+            <h1 class="text-4xl font-extrabold mb-3 text-gray-900 tracking-tight">
                 {title}
             </h1>
             <p class="text-lg text-gray-600 max-w-2xl mx-auto">
@@ -105,7 +103,7 @@ def generate():
     </main>
 
     <footer class="py-8 text-center text-xs text-gray-500 border-t border-gray-200 relative z-10 bg-white">
-        <p>&copy; 2026 sruffilli. github.io. Built with passion & AI.</p>
+        <p>&copy; sruffilli. Built with passion &amp; AI.</p>
     </footer>
 
 </body>
@@ -114,11 +112,11 @@ def generate():
     app_cards = ""
     for app in apps:
         app_cards += f"""
-            <a href="{app['link']}" class="bg-white border border-gray-200 rounded-xl p-6 flex flex-col justify-between transition-all duration-200 hover:shadow-md hover:border-blue-500 group">
+            <a href="{html.escape(app['link'])}" class="bg-white border border-gray-200 rounded-xl p-6 flex flex-col justify-between transition-all duration-200 hover:shadow-md hover:border-blue-500 group">
                 <div>
                     <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-xl font-bold font-outfit text-gray-900 group-hover:text-blue-600 transition-colors">
-                            {app['name']}
+                        <h2 class="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                            {html.escape(app['name'])}
                         </h2>
                         <div class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 group-hover:bg-blue-600 group-hover:text-white transition-all duration-200">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -127,16 +125,32 @@ def generate():
                         </div>
                     </div>
                     <p class="text-sm text-gray-600 group-hover:text-gray-700 transition-colors leading-relaxed">
-                        {app['desc']}
+                        {html.escape(app['desc'])}
                     </p>
                 </div>
             </a>"""
 
-    html = html_template.format(title=title, description=description, app_cards=app_cards)
+    page = html_template.format(
+        title=html.escape(title),
+        description=html.escape(description),
+        app_cards=app_cards,
+    )
 
+    return page
+
+
+def main():
+    page = generate()
+    if '--check' in sys.argv[1:]:
+        with open('index.html', encoding='utf-8') as f:
+            if f.read() != page:
+                sys.exit('index.html is out of date: run python scripts/generate_index.py and commit it.')
+        print('index.html is up to date')
+        return
     with open('index.html', 'w', encoding='utf-8') as f:
-        f.write(html)
+        f.write(page)
     print('Successfully generated index.html')
 
+
 if __name__ == '__main__':
-    generate()
+    main()
