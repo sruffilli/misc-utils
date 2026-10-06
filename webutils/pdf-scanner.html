@@ -112,7 +112,7 @@
         <div class="flex items-center gap-4">
             <span class="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded border border-gray-200"
                 id="pageCountBadge">No file</span>
-            <a href="https://github.com/sruffilli/sruffilli.github.io/blob/main/webutils/pdf-scanner.html"
+            <a href="https://github.com/sruffilli/misc-utils/blob/main/webutils/pdf-scanner.html"
                 target="_blank" class="text-gray-400 hover:text-gray-900">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                     <path
@@ -298,6 +298,15 @@
 
             <!-- Action Area -->
             <div class="p-5 border-t border-gray-200 bg-gray-50">
+                <div class="flex items-center justify-between mb-3">
+                    <label for="dpiSelect" class="text-xs font-medium text-gray-700">Export resolution</label>
+                    <select id="dpiSelect" class="text-xs bg-white border border-gray-200 rounded px-1.5 py-1">
+                        <option value="100">100 DPI (smallest)</option>
+                        <option value="150" selected>150 DPI</option>
+                        <option value="200">200 DPI</option>
+                        <option value="300">300 DPI (sharpest)</option>
+                    </select>
+                </div>
                 <button id="downloadBtn" disabled
                     class="w-full bg-gray-900 hover:bg-gray-800 text-white h-11 rounded-lg font-medium shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]">
                     <span>Export PDF</span>
@@ -374,6 +383,22 @@
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.149/pdf.worker.min.mjs';
 
+        // Preview canvases are rendered at 2 px per PDF point (144 DPI).
+        const PREVIEW_SCALE = 2.0;
+
+        const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 11));
+
+        // Coalesce redraw requests (slider input, drags) into one per frame.
+        let renderPending = false;
+        function scheduleRender() {
+            if (renderPending) return;
+            renderPending = true;
+            requestAnimationFrame(() => {
+                renderPending = false;
+                updatePreview();
+            });
+        }
+
         // --- Pun Generator ---
         (function initPuns() {
             const puns = [
@@ -404,7 +429,7 @@
                 this.noisePattern = null;
             }
 
-            createNoisePattern(intensity) {
+            createNoisePattern() {
                 const canvas = document.createElement('canvas');
                 canvas.width = 512;
                 canvas.height = 512;
@@ -434,8 +459,12 @@
                 ctx.putImageData(imgData, 0, 0);
             }
 
-            render(ctx, originalCanvas, options) {
+            // scale: canvas pixels per PDF point. Blur and grain are tuned at
+            // PREVIEW_SCALE and scaled from there, so the export looks like the
+            // preview at any DPI. pageNum shifts the grain so pages differ.
+            render(ctx, originalCanvas, options, { scale = PREVIEW_SCALE, pageNum = 1 } = {}) {
                 const { width, height } = originalCanvas;
+                const k = scale / PREVIEW_SCALE;
 
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, width, height);
@@ -448,7 +477,7 @@
                     ctx.translate(-width / 2, -height / 2);
                 }
 
-                let filterStr = `blur(${options.blur}px)`;
+                let filterStr = `blur(${options.blur * k}px)`;
                 if (options.grayscale) filterStr += ` grayscale(100%)`;
                 ctx.filter = filterStr;
 
@@ -466,6 +495,10 @@
                     ctx.globalCompositeOperation = 'overlay';
                     ctx.globalAlpha = options.noise / 100;
                     const pattern = ctx.createPattern(this.noisePattern, 'repeat');
+                    pattern.setTransform(new DOMMatrix()
+                        .scale(k)
+                        .translate((pageNum * 197) % 512, (pageNum * 331) % 512));
+                    ctx.imageSmoothingEnabled = false;
                     ctx.fillStyle = pattern;
                     ctx.fillRect(0, 0, width, height);
                     ctx.restore();
@@ -527,6 +560,7 @@
             sigThresholdInput: document.getElementById('sigThresholdInput'),
             valSigThreshold: document.getElementById('val-sigThreshold'),
             downloadBtn: document.getElementById('downloadBtn'),
+            dpiSelect: document.getElementById('dpiSelect'),
             statusArea: document.getElementById('statusArea'),
             progressBar: document.getElementById('progressBar'),
             statusText: document.getElementById('statusText'),
@@ -626,7 +660,7 @@
                         else display.innerText = val;
                     }
 
-                    requestAnimationFrame(updatePreview);
+                    scheduleRender();
                 });
             }
         });
@@ -736,7 +770,7 @@
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
-                    const id = Math.random().toString(36).substr(2, 9);
+                    const id = uid();
                     state.uploadedSignatures.push({ 
                         id, 
                         originalImage: img, 
@@ -842,6 +876,26 @@
         async function loadPDF(e) {
             const file = e.target.files[0];
             if (!file) return;
+            e.target.value = ''; // allow re-selecting the same file
+
+            els.pageCountBadge.innerText = "Loading...";
+
+            let pdfDoc;
+            try {
+                const data = new Uint8Array(await file.arrayBuffer());
+                pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+            } catch (err) {
+                console.warn('Failed to open PDF:', err);
+                els.pageCountBadge.innerText = state.pdfDoc ? `${state.pdfDoc.numPages} Pages` : "No file";
+                alert(err && err.name === 'PasswordException'
+                    ? "This PDF is password-protected. Remove the password and try again."
+                    : `Could not open "${file.name}": it does not look like a valid PDF.`);
+                return;
+            }
+
+            if (state.pdfDoc) state.pdfDoc.destroy();
+            state.pdfDoc = pdfDoc;
+            state.signatures = [];
 
             els.emptyState.classList.add('hidden');
             els.controls.classList.remove('opacity-40', 'pointer-events-none');
@@ -849,17 +903,12 @@
             els.zoomControls.classList.remove('hidden');
             els.previewControls.classList.remove('hidden');
             els.downloadBtn.disabled = false;
-            els.pageCountBadge.innerText = "Loading...";
 
-            const buf = await file.arrayBuffer();
-            state.pdfDoc = await pdfjsLib.getDocument(buf).promise;
-            state.signatures = [];
-            
             setMode('scanify');
             els.editModeBtn.classList.remove('hidden');
 
             els.pageCountBadge.innerText = `${state.pdfDoc.numPages} Pages`;
-            
+
             await renderPage(1);
         }
 
@@ -874,7 +923,7 @@
             const page = await state.pdfDoc.getPage(pageNum);
             
             const cssViewport = page.getViewport({ scale: 1.0 });
-            const renderViewport = page.getViewport({ scale: 2.0 });
+            const renderViewport = page.getViewport({ scale: PREVIEW_SCALE });
 
             const sourceCanvas = document.createElement('canvas');
             sourceCanvas.width = renderViewport.width;
@@ -930,26 +979,12 @@
             ctx.drawImage(source, 0, 0);
 
             const renderScale = composite.width / state.activePage.viewportWidth;
-            const pageSigs = state.signatures.filter(s => s.page === state.currentPage);
-            
-            pageSigs.forEach(sig => {
-                ctx.save();
-                ctx.translate(sig.x * renderScale, sig.y * renderScale);
-                ctx.rotate(sig.rotation * Math.PI / 180);
-                ctx.drawImage(
-                    sig.image, 
-                    -(sig.width * renderScale) / 2, 
-                    -(sig.height * renderScale) / 2, 
-                    sig.width * renderScale, 
-                    sig.height * renderScale
-                );
-                ctx.restore();
-            });
+            drawSignatures(ctx, state.currentPage, renderScale);
 
             const displayCtx = display.getContext('2d');
             
             if (state.mode === 'scanify') {
-                engine.render(displayCtx, composite, state.config);
+                engine.render(displayCtx, composite, state.config, { scale: PREVIEW_SCALE, pageNum: state.currentPage });
             } else {
                 // In Edit Mode, bypass effects for performance and clarity
                 displayCtx.clearRect(0, 0, display.width, display.height);
@@ -961,7 +996,6 @@
 
         // --- Interaction Logic ---
         let dragState = null;
-        let renderPending = false;
 
         function renderSignaturesOverlay() {
             const container = document.getElementById('overlayContainer');
@@ -1065,7 +1099,7 @@
                 const defaultHeight = defaultWidth / aspect;
 
                 state.signatures.push({
-                    id: Math.random().toString(36).substr(2, 9),
+                    id: uid(),
                     uploadId: activeSig.id,
                     page: state.currentPage,
                     image: img,
@@ -1115,13 +1149,7 @@
                 sig.rotation = angle + 90;
             }
 
-            if (!renderPending) {
-                renderPending = true;
-                requestAnimationFrame(() => {
-                    updatePreview();
-                    renderPending = false;
-                });
-            }
+            scheduleRender();
         }
 
         function handlePointerUp() {
@@ -1134,6 +1162,22 @@
 
         // --- Async Download Logic ---
 
+        function drawSignatures(ctx, pageNum, renderScale) {
+            state.signatures.filter(s => s.page === pageNum).forEach(sig => {
+                ctx.save();
+                ctx.translate(sig.x * renderScale, sig.y * renderScale);
+                ctx.rotate(sig.rotation * Math.PI / 180);
+                ctx.drawImage(
+                    sig.image,
+                    -(sig.width * renderScale) / 2,
+                    -(sig.height * renderScale) / 2,
+                    sig.width * renderScale,
+                    sig.height * renderScale
+                );
+                ctx.restore();
+            });
+        }
+
         async function downloadPDF() {
             if (!state.pdfDoc) return;
 
@@ -1141,75 +1185,49 @@
             els.downloadBtn.disabled = true;
             els.controls.classList.add('pointer-events-none', 'opacity-50');
 
-            const pdf = new jsPDF();
+            // PDF points are 1/72 inch.
+            const scale = parseInt(els.dpiSelect.value, 10) / 72;
             const total = state.pdfDoc.numPages;
+            let pdf = null;
 
-            let currentPage = 1;
+            // A plain loop, not requestAnimationFrame: rAF is paused in
+            // background tabs, which used to freeze the export.
+            try {
+                for (let pageNum = 1; pageNum <= total; pageNum++) {
+                    updateStatus(pageNum, total);
 
-            const processPage = async () => {
-                if (currentPage > total) {
-                    pdf.save('scanify_pro_export.pdf');
-                    finishDownload();
-                    return;
-                }
-
-                updateStatus(currentPage, total);
-
-                try {
-                    const pageData = await state.pdfDoc.getPage(currentPage);
-                    const viewport = pageData.getViewport({ scale: 1.5 });
+                    const pageData = await state.pdfDoc.getPage(pageNum);
+                    // Output page keeps the source page's size and orientation.
+                    const size = pageData.getViewport({ scale: 1 });
+                    const viewport = pageData.getViewport({ scale });
 
                     const sourceCanvas = document.createElement('canvas');
-                    sourceCanvas.width = viewport.width;
-                    sourceCanvas.height = viewport.height;
+                    sourceCanvas.width = Math.round(viewport.width);
+                    sourceCanvas.height = Math.round(viewport.height);
                     const sourceCtx = sourceCanvas.getContext('2d');
                     await pageData.render({ canvasContext: sourceCtx, viewport }).promise;
-
-                    // Apply signatures for this page
-                    const renderScale = viewport.scale;
-                    const pageSigs = state.signatures.filter(s => s.page === currentPage);
-                    
-                    pageSigs.forEach(sig => {
-                        sourceCtx.save();
-                        sourceCtx.translate(sig.x * renderScale, sig.y * renderScale);
-                        sourceCtx.rotate(sig.rotation * Math.PI / 180);
-                        sourceCtx.drawImage(
-                            sig.image, 
-                            -(sig.width * renderScale) / 2, 
-                            -(sig.height * renderScale) / 2, 
-                            sig.width * renderScale, 
-                            sig.height * renderScale
-                        );
-                        sourceCtx.restore();
-                    });
+                    drawSignatures(sourceCtx, pageNum, scale);
 
                     const destCanvas = document.createElement('canvas');
-                    destCanvas.width = viewport.width;
-                    destCanvas.height = viewport.height;
-                    const destCtx = destCanvas.getContext('2d');
+                    destCanvas.width = sourceCanvas.width;
+                    destCanvas.height = sourceCanvas.height;
+                    engine.render(destCanvas.getContext('2d'), sourceCanvas, state.config, { scale, pageNum });
 
-                    engine.render(destCtx, sourceCanvas, state.config);
+                    const format = [size.width, size.height];
+                    const orientation = size.width > size.height ? 'l' : 'p';
+                    if (!pdf) pdf = new jsPDF({ unit: 'pt', format, orientation, compress: true });
+                    else pdf.addPage(format, orientation);
 
-                    const imgData = destCanvas.toDataURL('image/jpeg', 0.80);
-
-                    if (currentPage > 1) pdf.addPage();
-
-                    const pdfW = pdf.internal.pageSize.getWidth();
-                    const pdfH = (destCanvas.height * pdfW) / destCanvas.width;
-
-                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
-
-                    currentPage++;
-                    requestAnimationFrame(processPage);
-
-                } catch (err) {
-                    console.error(err);
-                    alert("Error processing page " + currentPage);
-                    finishDownload();
+                    pdf.addImage(destCanvas.toDataURL('image/jpeg', 0.80), 'JPEG', 0, 0, size.width, size.height);
+                    pageData.cleanup();
                 }
-            };
-
-            processPage();
+                pdf.save('scanify_pro_export.pdf');
+            } catch (err) {
+                console.error(err);
+                alert("Error while exporting the PDF: " + (err && err.message ? err.message : err));
+            } finally {
+                finishDownload();
+            }
         }
 
         function updateStatus(page, total) {

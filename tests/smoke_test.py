@@ -13,6 +13,7 @@ the tests need network access.
 """
 
 import functools
+import re
 import http.server
 import sys
 import threading
@@ -369,13 +370,44 @@ def export_pdf(page: Page) -> bytes:
     return Path(dl.value.path()).read_bytes()
 
 
+def pdf_pages(data: bytes):
+    """(MediaBox width, height) of every page, and every image XObject width."""
+    boxes = [tuple(round(float(v)) for v in m) for m in
+             re.findall(rb"/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]", data)]
+    widths = [int(w) for w in re.findall(rb"/Subtype /Image.*?/Width (\d+)", data, re.S)]
+    return boxes, widths
+
+
 @test
-def scanner_loads_and_exports(c: Ctx):
+def scanner_keeps_page_sizes_and_dpi(c: Ctx):
+    """Export used to force every page onto A4 portrait at ~108 DPI."""
     page = c.page("/webutils/pdf-scanner.html")
-    load_pdf(page, [(595, 842), (842, 595)])
+    load_pdf(page, [(595, 842), (842, 595), (612, 1008)])  # A4, A4 landscape, US legal
     expect(page.locator("#previewWrapper canvas")).to_have_count(1)
     data = export_pdf(page)
     assert data.startswith(b"%PDF"), data[:20]
+    boxes, widths = pdf_pages(data)
+    assert boxes == [(595, 842), (842, 595), (612, 1008)], boxes
+    assert widths == [1240, 1754, 1275], widths  # 150 DPI default
+    page.locator("#dpiSelect").select_option("300")
+    _, widths = pdf_pages(export_pdf(page))
+    assert widths == [2479, 3508, 2550], widths
+    no_errors(page)
+
+
+@test
+def scanner_reports_unreadable_pdf(c: Ctx):
+    page = c.page("/webutils/pdf-scanner.html")
+    messages = []
+    page.on("dialog", lambda d: (messages.append(d.message), d.dismiss()))
+    page.locator("#fileInput").set_input_files(
+        files=[{"name": "broken.pdf", "mimeType": "application/pdf", "buffer": b"not a pdf at all"}])
+    expect(page.locator("#pageCountBadge")).to_have_text("No file", timeout=20000)
+    assert messages and "does not look like a valid PDF" in messages[0], messages
+    # the tool still works afterwards
+    load_pdf(page, [(595, 842)])
+    page.errors.clear()  # pdf.js logs the parse failure of the broken file
+    expect(page.locator("#previewWrapper canvas")).to_have_count(1)
     no_errors(page)
 
 

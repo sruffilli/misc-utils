@@ -5,7 +5,7 @@ A collection of single-file, portable web utilities. Your data never leaves the 
 ## Utilities
 
 ### 📄 [Scanify Pro](./webutils/pdf-scanner.html)
-High-performance document scanner simulation. Add tilt, blur, grain, and threshold effects to PDFs to simulate real scanner output. Local processing only.
+High-performance document scanner simulation. Add tilt, blur, grain, and threshold effects to PDFs to simulate real scanner output, and place signatures. The export keeps every page's size and orientation, at a selectable 100 to 300 DPI. Local processing only.
 
 ### 🔢 [Visual Subnet Calculator](./webutils/subnet-calculator.html)
 Split, join, and visualize IPv4 subnets effortlessly. Light-themed, responsive dashboard with real-time math.
