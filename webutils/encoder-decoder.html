@@ -10,13 +10,12 @@
   <script type="importmap">
     {
       "imports": {
-        "react": "https://esm.sh/react@19",
-        "react-dom": "https://esm.sh/react-dom@19",
-        "react-dom/client": "https://esm.sh/react-dom@19/client",
-        "react/jsx-runtime": "https://esm.sh/react@19/jsx-runtime"
+        "react": "https://esm.sh/react@19.3.0",
+        "react-dom/client": "https://esm.sh/react-dom@19.3.0/client",
+        "htm": "https://esm.sh/htm@3.1.1"
       }
     }
-    </script>
+  </script>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -52,8 +51,6 @@
     }
   </style>
 
-  <!-- Babel Standalone for In-Browser Transpilation -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- CryptoJS for Hashing Algorithms -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 </head>
@@ -61,47 +58,50 @@
 <body class="bg-gray-50 h-screen flex flex-col overflow-hidden text-gray-800">
   <div id="root" class="h-full flex flex-col"></div>
 
-  <script type="text/babel" data-type="module">
+  <script type="module">
     import React, { useState, useEffect } from 'react';
+    import htm from 'htm';
+
+    const html = htm.bind(React.createElement);
     import { createRoot } from 'react-dom/client';
 
     // --- Icons Fallback ---
     const Icon = ({ name, className }) => {
       const icons = {
         LinkIcon: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className=${className}>
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-          </svg>
+          </svg>`
         ),
         Home: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className=${className}>
             <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-          </svg>
+          </svg>`
         ),
         Check: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className=${className}>
             <polyline points="20 6 9 17 4 12" />
-          </svg>
+          </svg>`
         ),
         RefreshCw: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className=${className}>
             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
-          </svg>
+          </svg>`
         ),
         Trash2: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className=${className}>
             <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
-          </svg>
+          </svg>`
         ),
         Code2: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className=${className}>
             <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
-          </svg>
+          </svg>`
         ),
         FileText: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className=${className}>
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
-          </svg>
+          </svg>`
         ),
       };
       return icons[name] || null;
@@ -527,27 +527,27 @@
       const homeHref = '../index.html';
 
       return (
-        <div className="h-screen flex flex-col font-sans text-gray-800 bg-gray-50">
+        html`<div className="h-screen flex flex-col font-sans text-gray-800 bg-gray-50">
 
-          {/* Navbar */}
+          <!-- Navbar -->
           <nav className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 z-20">
             <div className="flex items-center gap-2">
-              <a href={homeHref} className="text-gray-400 hover:text-blue-600 transition-colors p-1" title="Back to Index">
-                <Icon name="Home" className="w-5 h-5" />
+              <a href=${homeHref} className="text-gray-400 hover:text-blue-600 transition-colors p-1" title="Back to Index">
+                <${Icon} name="Home" className="w-5 h-5" />
               </a>
               <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold text-sm ml-1">S</div>
               <div className="flex flex-col justify-center max-w-[200px] sm:max-w-md">
                 <span className="font-bold tracking-tight text-sm leading-tight">String<span className="text-blue-600">Codec</span></span>
-                <span className="text-[10px] text-gray-500 font-medium truncate" title={pun}>{pun}</span>
+                <span className="text-[10px] text-gray-500 font-medium truncate" title=${pun}>${pun}</span>
               </div>
             </div>
             <div className="flex items-center gap-4">
               <button
-                onClick={copyLink}
+                onClick=${copyLink}
                 className="text-xs font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded border border-gray-200 flex items-center gap-1.5 transition-colors"
               >
-                {copiedLink ? <Icon name="Check" className="w-4 h-4 text-emerald-600" /> : <Icon name="LinkIcon" className="w-4 h-4" />}
-                {copiedLink ? <span className="text-emerald-600">Copied!</span> : <span>Share Link</span>}
+                ${copiedLink ? html`<${Icon} name="Check" className="w-4 h-4 text-emerald-600" />` : html`<${Icon} name="LinkIcon" className="w-4 h-4" />`}
+                ${copiedLink ? html`<span className="text-emerald-600">Copied!</span>` : html`<span>Share Link</span>`}
               </button>
               <a href="https://github.com/sruffilli/sruffilli.github.io/blob/main/webutils/encoder-decoder.html" target="_blank" className="text-gray-400 hover:text-gray-900 transition-colors" title="GitHub Repository">
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.05-.015-2.055-3.33 0-4.035-1.44-4.29-1.875-.15-.36-.75-1.44-1.29-1.725-.435-.24-1.065-.825-.015-.84 1.14-.015 1.95 1.05 2.22 1.485 1.05 1.785 2.76 1.275 3.45.975.105-.75.405-1.275.735-1.575-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.225 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405 1.02 0 2.04.135 3 .405 2.28-1.545 3.285-1.23 3.285-1.23.66 1.695.24 2.925.12 3.225.765.84 1.23 1.92 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.42.36.78 1.095.78 2.205 0 1.59-.015 2.865-.015 3.255 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" /></svg>
@@ -557,51 +557,51 @@
 
           <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden">
 
-            {/* Sidebar */}
+            <!-- Sidebar -->
             <aside className="w-full md:w-80 bg-white border-b md:border-b-0 md:border-r border-gray-200 flex flex-col shrink-0 z-10 shadow-sm relative">
               <div className="flex-1 overflow-y-auto p-5 space-y-6">
 
-                {/* Mode Selection */}
+                <!-- Mode Selection -->
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    <Icon name="RefreshCw" className="w-4 h-4" /> Mode
+                    <${Icon} name="RefreshCw" className="w-4 h-4" /> Mode
                   </div>
                   <div className="flex p-1 bg-gray-100 rounded-lg">
                     <button
-                      className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-bold rounded-md transition-all ${mode === 'encode' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
-                      onClick={() => { setMode('encode'); if (['MD5', 'SHA-1', 'SHA-256', 'SHA-512'].includes(encoding) || encoding === 'Auto') setEncoding('Base64'); }}
+                      className=${`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-bold rounded-md transition-all ${mode === 'encode' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+                      onClick=${() => { setMode('encode'); if (['MD5', 'SHA-1', 'SHA-256', 'SHA-512'].includes(encoding) || encoding === 'Auto') setEncoding('Base64'); }}
                     >
                       Encode
                     </button>
                     <button
-                      className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-bold rounded-md transition-all ${mode === 'decode' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
-                      onClick={() => { setMode('decode'); if (['MD5', 'SHA-1', 'SHA-256', 'SHA-512'].includes(encoding)) setEncoding('Auto'); }}
+                      className=${`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-bold rounded-md transition-all ${mode === 'decode' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+                      onClick=${() => { setMode('decode'); if (['MD5', 'SHA-1', 'SHA-256', 'SHA-512'].includes(encoding)) setEncoding('Auto'); }}
                     >
                       Decode
                     </button>
                     <button
-                      className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-bold rounded-md transition-all ${mode === 'hash' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
-                      onClick={() => { setMode('hash'); if (!['MD5', 'SHA-1', 'SHA-256', 'SHA-512'].includes(encoding)) setEncoding('SHA-256'); }}
+                      className=${`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-bold rounded-md transition-all ${mode === 'hash' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+                      onClick=${() => { setMode('hash'); if (!['MD5', 'SHA-1', 'SHA-256', 'SHA-512'].includes(encoding)) setEncoding('SHA-256'); }}
                     >
                       Hash
                     </button>
                   </div>
                 </div>
 
-                {/* Format Selection */}
+                <!-- Format Selection -->
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    <Icon name="Code2" className="w-4 h-4" /> Format
+                    <${Icon} name="Code2" className="w-4 h-4" /> Format
                   </div>
                   <div className="relative">
                     <select
-                      value={encoding}
-                      onChange={(e) => setEncoding(e.target.value)}
+                      value=${encoding}
+                      onChange=${(e) => setEncoding(e.target.value)}
                       className="w-full bg-white border border-gray-300 text-gray-900 font-semibold text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block px-3 py-2.5 outline-none appearance-none cursor-pointer hover:bg-gray-50"
                     >
-                      {mode === 'decode' && <option value="Auto">Auto-detect ✨</option>}
-                      {mode !== 'hash' && (
-                        <>
+                      ${mode === 'decode' && html`<option value="Auto">Auto-detect ✨</option>`}
+                      ${mode !== 'hash' && (
+                        html`
                           <option value="Base64">Base64</option>
                           <option value="Base32">Base32</option>
                           <option value="Base58">Base58</option>
@@ -611,15 +611,15 @@
                           <option value="ROT26">ROT26</option>
                           <option value="URL">URL Encoding</option>
                           <option value="UUEncode">UUEncode</option>
-                        </>
+                        `
                       )}
-                      {mode === 'hash' && (
-                        <>
+                      ${mode === 'hash' && (
+                        html`
                           <option value="MD5">MD5</option>
                           <option value="SHA-1">SHA-1</option>
                           <option value="SHA-256">SHA-256</option>
                           <option value="SHA-512">SHA-512</option>
-                        </>
+                        `
                       )}
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
@@ -630,47 +630,47 @@
 
                 <hr className="border-gray-200" />
 
-                {/* Actions */}
+                <!-- Actions -->
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    <Icon name="FileText" className="w-4 h-4" /> Actions
+                    <${Icon} name="FileText" className="w-4 h-4" /> Actions
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={handleSwitchMode}
-                      disabled={mode === 'hash'}
-                      className={`px-3 py-2 font-medium rounded-lg text-sm shadow-sm transition-all flex items-center justify-center gap-1.5 ${mode === 'hash' ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-100' : 'bg-blue-600 hover:bg-blue-700 text-white border border-transparent'}`}
+                      onClick=${handleSwitchMode}
+                      disabled=${mode === 'hash'}
+                      className=${`px-3 py-2 font-medium rounded-lg text-sm shadow-sm transition-all flex items-center justify-center gap-1.5 ${mode === 'hash' ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-100' : 'bg-blue-600 hover:bg-blue-700 text-white border border-transparent'}`}
                     >
-                      <Icon name="RefreshCw" className="w-4 h-4" />
+                      <${Icon} name="RefreshCw" className="w-4 h-4" />
                       Swap
                     </button>
                     <button
                       type="button"
-                      onClick={handleClear}
+                      onClick=${handleClear}
                       className="px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 font-medium rounded-lg text-sm border border-gray-200 transition-all flex items-center justify-center gap-1.5"
                     >
-                      <Icon name="Trash2" className="w-4 h-4 text-gray-400" />
+                      <${Icon} name="Trash2" className="w-4 h-4 text-gray-400" />
                       Clear
                     </button>
                   </div>
                 </div>
 
-                {error && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-red-600 text-xs text-left">
+                ${error && (
+                  html`<div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-red-600 text-xs text-left">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mt-0.5 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
-                    <span className="font-semibold">{error}</span>
-                  </div>
+                    <span className="font-semibold">${error}</span>
+                  </div>`
                 )}
 
               </div>
             </aside>
 
-            {/* Main Content */}
+            <!-- Main Content -->
             <main className="flex-1 bg-grid md:overflow-y-auto overflow-x-hidden flex flex-col relative p-4 md:p-6">
 
               <div className="flex flex-col h-full gap-5 mx-auto w-full max-w-4xl max-h-[900px]">
-                {/* Input Panel */}
+                <!-- Input Panel -->
                 <div className="flex-1 flex flex-col bg-white border border-gray-200 rounded-xl shadow-sm text-gray-800 focus-within:ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-50 transition-shadow">
                   <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 rounded-t-xl shrink-0 flex items-center justify-between">
                     <div className="text-xs font-bold tracking-wider uppercase text-gray-500 flex items-center gap-2">
@@ -678,40 +678,40 @@
                     </div>
                   </div>
                   <textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder={`Paste or type string to ${mode}...`}
+                    value=${input}
+                    onChange=${(e) => setInput(e.target.value)}
+                    placeholder=${`Paste or type string to ${mode}...`}
                     className="w-full flex-1 p-4 bg-transparent resize-none outline-none font-mono text-sm leading-relaxed"
                     spellCheck="false"
                   ></textarea>
                 </div>
 
-                {/* Output Panel */}
+                <!-- Output Panel -->
                 <div className="flex-1 flex flex-col bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden relative">
                   <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 rounded-t-xl shrink-0 flex justify-between items-center">
                     <div className="text-xs font-bold tracking-wider uppercase text-gray-500 flex items-center gap-2">
-                      {mode === 'encode' ? 'Encoded Output' : mode === 'decode' ? (encoding === 'Auto' && detectedFormat && detectedFormat !== 'Auto' ? `Decoded Output (${detectedFormat})` : 'Decoded Output') : 'Hashed Output'}
+                      ${mode === 'encode' ? 'Encoded Output' : mode === 'decode' ? (encoding === 'Auto' && detectedFormat && detectedFormat !== 'Auto' ? `Decoded Output (${detectedFormat})` : 'Decoded Output') : 'Hashed Output'}
                     </div>
-                    {output && !error && (
-                      <button
-                        onClick={copyOutput}
+                    ${output && !error && (
+                      html`<button
+                        onClick=${copyOutput}
                         className="text-[11px] font-bold bg-white text-blue-600 hover:text-blue-800 px-2 py-1 rounded shadow-sm border border-gray-200 flex items-center gap-1 transition-colors"
                       >
-                        {copiedOutput ? (
-                          <><Icon name="Check" className="w-3 h-3 text-emerald-500" /> Copied</>
+                        ${copiedOutput ? (
+                          html`<${Icon} name="Check" className="w-3 h-3 text-emerald-500" /> Copied`
                         ) : (
-                          <><Icon name="FileText" className="w-3 h-3" /> Copy</>
+                          html`<${Icon} name="FileText" className="w-3 h-3" /> Copy`
                         )}
-                      </button>
+                      </button>`
                     )}
                   </div>
                   <div className="w-full flex-1 p-4 overflow-auto font-mono text-sm leading-relaxed select-text">
-                    {error ? (
-                      <div className="text-red-500 text-center mt-10 italic">Waiting for valid input...</div>
+                    ${error ? (
+                      html`<div className="text-red-500 text-center mt-10 italic">Waiting for valid input...</div>`
                     ) : !input ? (
-                      <div className="text-gray-400 text-center mt-10 italic font-sans">Result will appear here</div>
+                      html`<div className="text-gray-400 text-center mt-10 italic font-sans">Result will appear here</div>`
                     ) : (
-                      <span className="text-gray-900 break-all whitespace-pre-wrap">{output}</span>
+                      html`<span data-testid="output" className="text-gray-900 break-all whitespace-pre-wrap">${output}</span>`
                     )}
                   </div>
                 </div>
@@ -720,20 +720,20 @@
             </main>
           </div>
 
-          {/* Toast Message */}
-          {toastMessage && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium z-50 flex items-center gap-2">
+          <!-- Toast Message -->
+          ${toastMessage && (
+            html`<div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium z-50 flex items-center gap-2">
               <span className="text-xl">🤷‍♂️</span>
-              <span>{toastMessage}</span>
-            </div>
+              <span>${toastMessage}</span>
+            </div>`
           )}
 
-        </div>
+        </div>`
       );
     }
 
     const root = createRoot(document.getElementById('root'));
-    root.render(<App />);
+    root.render(html`<${App} />`);
   </script>
 </body>
 

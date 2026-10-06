@@ -9,10 +9,10 @@ When agents create or modify UI applications in this repository, they MUST adher
 ### 1. Technology Stack
 - **Single-file HTML**: Tools must be portable, zero-build, single-page local applications contained entirely within a single `.html` file.
 - **Frameworks**:
-  - **React (Preferred)**: Use standard React via `https://esm.sh/react@19` (loaded in an Import Map).
+  - **React (Preferred)**: Use React via `https://esm.sh/react@<exact version>` (loaded in an Import Map), rendered with [htm](https://github.com/developit/htm) tagged templates instead of JSX.
   - **Vanilla JS**: Acceptable for performance-critical utilities or those requiring direct DOM/Canvas manipulation (e.g., `pdf-scanner.html`).
 - **Styling**: Use TailwindCSS via CDN (`https://cdn.tailwindcss.com`).
-- **Compilation**: Use `@babel/standalone` (`https://unpkg.com/@babel/standalone/babel.min.js`) for in-browser JSX transpilation when using React.
+- **No transpilation**: Do not use JSX or `@babel/standalone` (3 MB, recompiles on every page load). Write markup with htm: `const html = htm.bind(React.createElement);` then ``html`<div className=${cls}>${value}</div>` ``. Components are ``<${Icon} name="X" />``, component closing tags are `<//>`, comments are `<!-- ... -->`. htm does not decode HTML entities: write the literal character (`→`, `×`) instead of `&rarr;`.
 
 ### 2. Layout & Visual Language
 - **Base Wrapping**: Use a full-screen flex layout: `class="h-screen flex flex-col font-sans text-gray-800 bg-gray-50"`.
