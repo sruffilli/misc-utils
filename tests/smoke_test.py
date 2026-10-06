@@ -1,18 +1,23 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["playwright>=1.48"]
+# dependencies = ["playwright==1.63.0"]
 # ///
 """Browser smoke and regression tests for the webutils.
 
-Run with:  uv run tests/smoke_test.py
-First time: uv run --with playwright playwright install chromium
+Run with:  uv run tests/smoke_test.py [test_name ...]
+First time: uv run --with playwright==1.63.0 playwright install chromium
 
-Serves the repository root over HTTP on a random port and drives each tool
-in headless Chromium. The tools load their libraries from public CDNs, so
-the tests need network access.
+Serves the site over HTTP on a random port and drives each tool in headless
+Chromium. The tools load their libraries from public CDNs, so the tests need
+network access.
+
+SITE=dist runs the same tests against the built copy (scripts/build_dist.py);
+dist_matches_source then also checks that the built pages render pixel for
+pixel like the source pages.
 """
 
 import functools
+import os
 import re
 import http.server
 import sys
@@ -22,7 +27,8 @@ from pathlib import Path
 
 from playwright.sync_api import Page, expect, sync_playwright
 
-ROOT = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parent.parent
+ROOT = (REPO / os.environ["SITE"]).resolve() if os.environ.get("SITE") else REPO
 TESTS = []
 
 
@@ -68,8 +74,31 @@ def no_errors(page: Page):
 @test
 def index_is_up_to_date(c: Ctx):
     import subprocess
-    r = subprocess.run([sys.executable, "scripts/generate_index.py", "--check"], cwd=ROOT, capture_output=True, text=True)
+    r = subprocess.run([sys.executable, "scripts/generate_index.py", "--check"], cwd=REPO, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr or r.stdout
+
+
+@test
+def dist_matches_source(c: Ctx):
+    """Precompiled Tailwind must style the page exactly like the Play CDN."""
+    if ROOT == REPO:
+        print("     (skipped: set SITE=dist)")
+        return
+    from playwright.sync_api import sync_playwright  # noqa: F401  (already running)
+    pages = ["index.html", "webutils/subnet-calculator.html", "webutils/cidr-aggregator.html",
+             "webutils/encoder-decoder.html", "webutils/pdf-scanner.html"]
+    for rel in pages:
+        shots = []
+        for root in (REPO, ROOT):
+            context = c.browser.new_context(viewport={"width": 1280, "height": 900})
+            context.add_init_script("Math.random = () => 0.42")
+            page = context.new_page()
+            page.goto((root / rel).as_uri())
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(500)
+            shots.append(page.screenshot(full_page=True))
+            context.close()
+        assert shots[0] == shots[1], f"{rel}: dist renders differently from source"
 
 
 # --- every tool loads cleanly -------------------------------------------------

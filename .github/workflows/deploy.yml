@@ -5,20 +5,32 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+# Never run two deploys at once: they push to the same repository.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.x'
+          node-version: '22'
 
-      - name: Generate index.html
-        run: python scripts/generate_index.py
+      - name: Build dist (precompiled Tailwind CSS)
+        run: python3 scripts/build_dist.py
 
       - name: Deploy to sruffilli.github.io
         env:
@@ -33,22 +45,23 @@ jobs:
           git clone https://x-access-token:${DEPLOY_TOKEN}@github.com/sruffilli/sruffilli.github.io.git out
 
           cd out
-          
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Copy the generated index.html to the root of destination
-          cp ../index.html .
+          # Only index.html and webutils/ belong to this repo; everything
+          # else in the destination is published by other repositories.
+          cp ../dist/index.html .
 
           # Synchronize the webutils directory (clean replace)
           rm -rf webutils
-          cp -r ../webutils .
+          cp -r ../dist/webutils .
 
-          git add .
-          
+          git add index.html webutils
+
           # Commit and push only if there are changes
           if git status --porcelain | grep -q .; then
-            git commit -m "Auto-deploy from webutils workspace"
+            git commit -m "Auto-deploy from misc-utils ${GITHUB_SHA::7}"
             git push origin main
           else
             echo "No changes to commit"

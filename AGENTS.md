@@ -11,7 +11,7 @@ When agents create or modify UI applications in this repository, they MUST adher
 - **Frameworks**:
   - **React (Preferred)**: Use React via `https://esm.sh/react@<exact version>` (loaded in an Import Map), rendered with [htm](https://github.com/developit/htm) tagged templates instead of JSX.
   - **Vanilla JS**: Acceptable for performance-critical utilities or those requiring direct DOM/Canvas manipulation (e.g., `pdf-scanner.html`).
-- **Styling**: Use TailwindCSS v3 via the Play CDN pinned to an exact version (`https://cdn.tailwindcss.com/3.4.17`).
+- **Styling**: Use TailwindCSS v3 via the Play CDN pinned to an exact version (`https://cdn.tailwindcss.com/3.4.17`). Keep the tag exactly like that and the config in a `<script>tailwind.config = {...}</script>` block: `scripts/build_dist.py` replaces both with precompiled CSS for the published site. Write every class name in full in the source (`'bg-blue-600'`, never `'bg-' + color`), or the build cannot see it.
 - **No transpilation**: Do not use JSX or `@babel/standalone` (3 MB, recompiles on every page load). Write markup with htm: `const html = htm.bind(React.createElement);` then ``html`<div className=${cls}>${value}</div>` ``. Components are ``<${Icon} name="X" />``, component closing tags are `<//>`, comments are `<!-- ... -->`. htm does not decode HTML entities: write the literal character (`→`, `×`) instead of `&rarr;`.
 
 ### 2. Layout & Visual Language
@@ -44,5 +44,11 @@ When agents create or modify UI applications in this repository, they MUST adher
 - **Graceful Failure**: If parsing data fails (e.g., invalid Base64 string), fail gracefully by catching errors and displaying intuitive, user-friendly error messages in the UI rather than breaking the application.
 - **Puns & Personality**: All utilities must include a "Pun Generator" (using a random array of funny, tool-specific puns) that populate the subtitle displayed in the UI header and the document title on load. This keeps the UX fun and engaging.
 
-### 6. Documentation Maintenance
+### 6. Testing
+- **Run `uv run tests/smoke_test.py` before every commit** and add a test for every bug you fix or feature you add. The suite fails on any page error or `console.error`.
+- A test that fixes a bug should fail on the code before the fix; check that it does.
+- After changing styling, also run `python3 scripts/build_dist.py && SITE=dist uv run tests/smoke_test.py`: `dist_matches_source` catches classes the Tailwind build missed.
+- If you change `README.md`, run `python scripts/generate_index.py`: the tests fail when `index.html` is out of date.
+
+### 7. Documentation Maintenance
 - **README Updates**: When adding a completely new tool or introducing major features to an existing one, you MUST ensure that `README.md` is appropriately updated to reflect these additions.
