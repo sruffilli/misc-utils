@@ -31,8 +31,11 @@ def test(fn):
 
 
 def serve():
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(ROOT))
-    handler.log_message = lambda *a, **k: None
+    class Quiet(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+    handler = functools.partial(Quiet, directory=str(ROOT))
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd, f"http://127.0.0.1:{httpd.server_address[1]}"
@@ -93,6 +96,20 @@ def pages_work_from_file_urls(c: Ctx):
         page.context.close()
 
 
+@test
+def csp_blocks_network(c: Ctx):
+    """The CSP must stop a compromised dependency from sending data anywhere."""
+    for name in ["subnet-calculator.html", "cidr-aggregator.html", "encoder-decoder.html", "pdf-scanner.html"]:
+        page = c.page(f"/webutils/{name}")
+        page.wait_for_load_state("networkidle")
+        outcome = page.evaluate("""async () => {
+            try { await fetch('https://example.com/?leak=1', {mode: 'no-cors'}); return 'sent'; }
+            catch (e) { return 'blocked'; }
+        }""")
+        assert outcome == "blocked", f"{name}: fetch was not blocked"
+        page.context.close()
+
+
 # --- subnet calculator --------------------------------------------------------
 
 @test
@@ -133,6 +150,51 @@ def codec_base64_roundtrip(c: Ctx):
     page.locator("textarea").first.fill("hello world")
     page.locator("select").select_option("Base64")
     expect(codec_output(page)).to_have_text("aGVsbG8gd29ybGQ=")
+    no_errors(page)
+
+
+# --- PDF scanner -------------------------------------------------------------
+
+def make_pdf(pages):
+    """Minimal vector-only PDF; pages is a list of (width_pt, height_pt)."""
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>", None]
+    kids = []
+    for w, h in pages:
+        content = f"0 0 0 rg 36 36 {w - 72} 20 re f 0.5 g 36 {h - 120} {w / 2} 60 re f".encode()
+        objs.append(f"<< /Length {len(content)} >>\nstream\n{content.decode()}\nendstream")
+        objs.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {w} {h}] /Contents {len(objs)} 0 R /Resources << >> >>")
+        kids.append(f"{len(objs)} 0 R")
+    objs[1] = f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(pages)} >>"
+    out, offsets = b"%PDF-1.4\n", []
+    for i, body in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n{body}\nendobj\n".encode()
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    out += "".join(f"{o:010d} 00000 n \n" for o in offsets).encode()
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return out
+
+
+def load_pdf(page: Page, pages):
+    page.locator("#fileInput").set_input_files(
+        files=[{"name": "t.pdf", "mimeType": "application/pdf", "buffer": make_pdf(pages)}])
+    expect(page.locator("#pageCountBadge")).to_have_text(f"{len(pages)} Pages", timeout=20000)
+
+
+def export_pdf(page: Page) -> bytes:
+    with page.expect_download(timeout=60000) as dl:
+        page.locator("#downloadBtn").click()
+    return Path(dl.value.path()).read_bytes()
+
+
+@test
+def scanner_loads_and_exports(c: Ctx):
+    page = c.page("/webutils/pdf-scanner.html")
+    load_pdf(page, [(595, 842), (842, 595)])
+    expect(page.locator("#previewWrapper canvas")).to_have_count(1)
+    data = export_pdf(page)
+    assert data.startswith(b"%PDF"), data[:20]
     no_errors(page)
 
 

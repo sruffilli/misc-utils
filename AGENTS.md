@@ -11,7 +11,7 @@ When agents create or modify UI applications in this repository, they MUST adher
 - **Frameworks**:
   - **React (Preferred)**: Use React via `https://esm.sh/react@<exact version>` (loaded in an Import Map), rendered with [htm](https://github.com/developit/htm) tagged templates instead of JSX.
   - **Vanilla JS**: Acceptable for performance-critical utilities or those requiring direct DOM/Canvas manipulation (e.g., `pdf-scanner.html`).
-- **Styling**: Use TailwindCSS via CDN (`https://cdn.tailwindcss.com`).
+- **Styling**: Use TailwindCSS v3 via the Play CDN pinned to an exact version (`https://cdn.tailwindcss.com/3.4.17`).
 - **No transpilation**: Do not use JSX or `@babel/standalone` (3 MB, recompiles on every page load). Write markup with htm: `const html = htm.bind(React.createElement);` then ``html`<div className=${cls}>${value}</div>` ``. Components are ``<${Icon} name="X" />``, component closing tags are `<//>`, comments are `<!-- ... -->`. htm does not decode HTML entities: write the literal character (`→`, `×`) instead of `&rarr;`.
 
 ### 2. Layout & Visual Language
@@ -24,20 +24,24 @@ When agents create or modify UI applications in this repository, they MUST adher
   - **Left Sidebar (`<aside>`)**: Responsive width (`w-full md:w-80`), white background, bottom border on mobile, right border on desktop (`border-b md:border-b-0 md:border-r`). Used for placing controls, inputs, settings, and operation toggles. This naturally stacks on top of the main content on smaller screens.
   - **Main Content (`<main>`)**: Flexible width (`flex-1`), light gray background (often using a `.bg-grid` utility class for a subtle dotted/grid pattern). Used for the primary output or main interactive workspace. Ensure internal padding adjusts for mobile (`p-4 md:p-6`) and allow tables to scroll horizontally (`overflow-x-auto min-w-[size]`).
 - **Typography & Colors**:
-  - Use `Inter` for sans-serif UI elements.
-  - Use `JetBrains Mono` for code, IP addresses, or string payloads.
+  - Use Tailwind's default system font stacks: `font-sans` for UI elements, `font-mono` for code, IP addresses, or string payloads. Do not load web fonts (Google Fonts leaks every visitor's IP to a third party and blocks rendering).
   - Rely on Tailwind's default gray/slate scale for neutral elements and primary brand colors (e.g. `blue-600`) for primary positive actions.
 
-### 3. Independence & Portability
+### 3. Dependencies & Content Security Policy
+- **Pin exact versions** of every CDN dependency. No floating tags (`@latest`, `react@19`, bare `cdn.tailwindcss.com`).
+- **Subresource Integrity** where the CDN allows it: static files on cdnjs get `integrity="sha384-..." crossorigin="anonymous"` on `<script>`, or an `"integrity"` entry in the import map for ES modules. Compute the hash with `curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A`. Two exceptions, because their bytes are not stable: esm.sh (serves per-browser builds) and the Tailwind Play CDN (no CORS headers).
+- **Every tool ships a CSP `<meta>` tag** with `default-src 'none'` and `connect-src 'none'`. This makes the README's promise enforceable: even a compromised dependency cannot `fetch`, XHR, WebSocket or beacon your data out. Allow only the script origins the tool actually uses. `tests/smoke_test.py` checks that `fetch` is blocked on every page.
+
+### 4. Independence & Portability
 - **Self-Contained Files**: Every tool must be a completely standalone HTML file. Do not reference local CSS, JS, or image files.
 - **Assets**: All icons should be implemented as inline SVGs.
 - **Link Paths**: To ensure cross-platform compatibility, always use relative links (e.g., `./tool.html`) rather than absolute local paths.
 
-### 4. Code Conventions
+### 5. Code Conventions
 - **Formatting**: Use standard 2-space indentation for HTML and JavaScript.
 - **Responsiveness**: Ensure the layout gracefully adapts to smaller screens using Tailwind's `sm:`, `md:`, etc., utility classes where appropriate.
 - **Graceful Failure**: If parsing data fails (e.g., invalid Base64 string), fail gracefully by catching errors and displaying intuitive, user-friendly error messages in the UI rather than breaking the application.
 - **Puns & Personality**: All utilities must include a "Pun Generator" (using a random array of funny, tool-specific puns) that populate the subtitle displayed in the UI header and the document title on load. This keeps the UX fun and engaging.
 
-### 5. Documentation Maintenance
+### 6. Documentation Maintenance
 - **README Updates**: When adding a completely new tool or introducing major features to an existing one, you MUST ensure that `README.md` is appropriately updated to reflect these additions.

@@ -4,6 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Enforces "your data never leaves the browser": no fetch/XHR/WebSocket/beacon, no forms,
+       scripts only from the pinned CDNs below. See AGENTS.md before relaxing it. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://esm.sh https://cdn.tailwindcss.com https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
   <title>String Encoder & Decoder</title>
 
   <!-- Import Map for Bare Module Resolution -->
@@ -18,13 +21,12 @@
   </script>
 
   <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
 
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: { mono: ['"JetBrains Mono"', 'monospace'] },
           colors: {
             brand: { 500: '#3b82f6', 600: '#2563eb' }
           }
@@ -33,14 +35,8 @@
     }
   </script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
-
-    body {
-      font-family: 'Inter', sans-serif;
-    }
-
     .mono {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
     }
 
     .bg-grid {
