@@ -447,6 +447,55 @@ def scanner_reports_unreadable_pdf(c: Ctx):
     no_errors(page)
 
 
+def append_pdf(page: Page, *files):
+    page.locator("#appendInput").set_input_files(files=[
+        {"name": f"a{i}.pdf", "mimeType": "application/pdf",
+         "buffer": f if isinstance(f, bytes) else make_pdf(f)} for i, f in enumerate(files)])
+
+
+@test
+def scanner_appends_pdfs(c: Ctx):
+    """Opening a PDF used to be the only option, and it replaced the current one."""
+    page = c.page("/webutils/pdf-scanner.html")
+    expect(page.locator("#appendControls")).to_be_hidden()
+    load_pdf(page, [(595, 842)])
+
+    # a signature placed before appending stays on its page
+    upload_signature(page)
+    page.locator("#overlayContainer").click()
+    expect(page.locator("#overlayContainer > div")).to_have_count(1)
+
+    # two files at once, in selection order; the view jumps to the first new page
+    append_pdf(page, [(842, 595)], [(612, 1008), (595, 842)])
+    expect(page.locator("#pageCountBadge")).to_have_text("4 Pages", timeout=20000)
+    expect(page.locator("#pageIndicator")).to_have_text("Page 2 of 4")
+    expect(page.locator("#overlayContainer > div")).to_have_count(0)
+    page.locator("#prevPageBtn").click()
+    expect(page.locator("#pageIndicator")).to_have_text("Page 1 of 4")
+    expect(page.locator("#overlayContainer > div")).to_have_count(1)
+
+    boxes, _ = pdf_pages(export_pdf(page))
+    assert boxes == [(595, 842), (842, 595), (612, 1008), (595, 842)], boxes
+
+    # a broken file is reported and changes nothing
+    messages = []
+    page.on("dialog", lambda d: (messages.append(d.message), d.dismiss()))
+    append_pdf(page, b"not a pdf at all")
+    for _ in range(100):
+        if messages:
+            break
+        page.wait_for_timeout(100)
+    expect(page.locator("#pageCountBadge")).to_have_text("4 Pages")
+    assert messages and "does not look like a valid PDF" in messages[0], messages
+    page.errors.clear()  # pdf.js logs the parse failure
+
+    # Upload PDF still replaces everything
+    load_pdf(page, [(595, 842)])
+    expect(page.locator("#pageIndicator")).to_have_text("Page 1 of 1")
+    expect(page.locator("#overlayContainer > div")).to_have_count(0)
+    no_errors(page)
+
+
 def make_png(width, height):
     """Grey RGB PNG with a black stroke across the middle."""
     import struct
