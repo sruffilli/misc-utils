@@ -447,6 +447,121 @@ def scanner_reports_unreadable_pdf(c: Ctx):
     no_errors(page)
 
 
+def make_png(width, height):
+    """Grey RGB PNG with a black stroke across the middle."""
+    import struct
+    import zlib
+    row_bg = b"\x00" + b"\xf0\xf0\xf0" * width
+    row_ink = b"\x00" + b"\x10\x10\x10" * width
+    mid = range(height // 2 - 2, height // 2 + 2)
+    raw = b"".join(row_ink if y in mid else row_bg for y in range(height))
+
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+def upload_signature(page: Page, width=300, height=100):
+    before = page.locator("#sigThumbnails > div").count()
+    page.locator("#sigInput").set_input_files(
+        files=[{"name": "sig.png", "mimeType": "image/png", "buffer": make_png(width, height)}])
+    expect(page.locator("#sigThumbnails > div")).to_have_count(before + 1)
+
+
+def saved_signatures(page: Page):
+    """Records in the scanner's IndexedDB store, with the stored image size."""
+    return page.evaluate("""() => new Promise((resolve, reject) => {
+        const open = indexedDB.open('scanify-pro');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+            const db = open.result;
+            if (!db.objectStoreNames.contains('signatures')) { db.close(); return resolve([]); }
+            const req = db.transaction('signatures').objectStore('signatures').getAll();
+            req.onsuccess = async () => {
+                db.close();
+                resolve(await Promise.all(req.result.map(r => new Promise(ok => {
+                    const img = new Image();
+                    img.onload = () => ok({ ...r, src: undefined, w: img.width, h: img.height });
+                    img.src = r.src;
+                }))));
+            };
+        };
+    })""")
+
+
+@test
+def scanner_remembers_signatures_only_on_request(c: Ctx):
+    page = c.page("/webutils/pdf-scanner.html")
+    load_pdf(page, [(595, 842)])
+    remember = page.locator("#rememberSigCheck")
+
+    # not remembered by default
+    upload_signature(page)
+    expect(remember).not_to_be_checked()
+    assert saved_signatures(page) == []
+
+    # remembered on request, downscaled, settings kept in sync
+    upload_signature(page, 3000, 600)
+    remember.check()
+    page.locator("#inkColorSelect").select_option("blue")
+    page.locator("#transparentCheck").check()
+    page.wait_for_function("() => window.__sigStoreIdle()")
+    saved = saved_signatures(page)
+    assert len(saved) == 1, saved
+    assert (saved[0]["w"], saved[0]["h"]) == (1000, 200), saved
+    assert saved[0]["inkColor"] == "blue" and saved[0]["transparent"] is True, saved
+
+    # back after a reload, before any PDF is opened, with its settings
+    page.reload()
+    expect(page.locator("#sigThumbnails > div")).to_have_count(1)
+    load_pdf(page, [(595, 842)])
+    page.locator("#sigThumbnails > div").first.click()
+    expect(remember).to_be_checked()
+    expect(page.locator("#inkColorSelect")).to_have_value("blue")
+    expect(page.locator("#transparentCheck")).to_be_checked()
+
+    # a restored signature can still be placed and exported
+    page.locator("#overlayContainer").click()
+    expect(page.locator("#overlayContainer > div")).to_have_count(1)
+    assert export_pdf(page).startswith(b"%PDF")
+
+    # unticking forgets it, deleting a remembered one forgets it too
+    remember.uncheck()
+    page.wait_for_function("() => window.__sigStoreIdle()")
+    assert saved_signatures(page) == []
+    remember.check()
+    page.wait_for_function("() => window.__sigStoreIdle()")
+    assert len(saved_signatures(page)) == 1
+    page.locator("#removeSigBtn").click()
+    page.wait_for_function("() => window.__sigStoreIdle()")
+    assert saved_signatures(page) == []
+    no_errors(page)
+
+
+@test
+def scanner_forgets_all_saved_signatures(c: Ctx):
+    page = c.page("/webutils/pdf-scanner.html")
+    load_pdf(page, [(595, 842)])
+    forget = page.locator("#forgetSigsBtn")
+    expect(forget).to_be_hidden()
+    for _ in range(2):
+        upload_signature(page)
+        page.locator("#rememberSigCheck").check()
+    expect(forget).to_be_visible()
+    page.wait_for_function("() => window.__sigStoreIdle()")
+    assert len(saved_signatures(page)) == 2
+    forget.click()
+    page.wait_for_function("() => window.__sigStoreIdle()")
+    assert saved_signatures(page) == []
+    expect(forget).to_be_hidden()
+    expect(page.locator("#sigThumbnails > div")).to_have_count(2)  # still usable this session
+    page.reload()
+    expect(page.locator("#pageCountBadge")).to_have_text("No file")
+    expect(page.locator("#sigThumbnails > div")).to_have_count(0)
+    no_errors(page)
+
+
 # --- runner -------------------------------------------------------------------
 
 def main(selected):

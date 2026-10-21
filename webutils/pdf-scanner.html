@@ -155,6 +155,7 @@
                     </div>
 
                     <div id="sigThumbnails" class="flex flex-wrap gap-2 mb-3 empty:hidden"></div>
+                    <button id="forgetSigsBtn" class="hidden w-full text-left text-[10px] text-gray-500 hover:text-red-600 font-medium mb-3" title="Delete every signature saved in this browser. They stay usable until you close the page.">Forget saved signatures</button>
 
                     <div id="sigSettings" class="hidden space-y-3 bg-gray-50 p-3 rounded-lg border border-gray-200 mb-3">
                         <div class="flex items-center justify-between">
@@ -179,6 +180,13 @@
                                 <span class="mono text-gray-500" id="val-sigThreshold">50</span>
                             </div>
                             <input type="range" id="sigThresholdInput" min="0" max="255" step="1" value="50" class="w-full">
+                        </div>
+                        <div id="rememberControls" class="border-t border-gray-200 pt-3">
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" id="rememberSigCheck" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+                                <label for="rememberSigCheck" class="text-xs font-medium text-gray-700">Remember on this device</label>
+                            </div>
+                            <p class="text-[10px] text-gray-500 mt-1">Saved only in this browser, never uploaded. Anyone using this browser profile can reuse it.</p>
                         </div>
                     </div>
 
@@ -558,6 +566,9 @@
             transparentCheck: document.getElementById('transparentCheck'),
             transparentControls: document.getElementById('transparentControls'),
             sigThresholdInput: document.getElementById('sigThresholdInput'),
+            rememberControls: document.getElementById('rememberControls'),
+            rememberSigCheck: document.getElementById('rememberSigCheck'),
+            forgetSigsBtn: document.getElementById('forgetSigsBtn'),
             valSigThreshold: document.getElementById('val-sigThreshold'),
             downloadBtn: document.getElementById('downloadBtn'),
             dpiSelect: document.getElementById('dpiSelect'),
@@ -589,6 +600,7 @@
             if (sig) {
                 sig.inkColor = e.target.value;
                 reprocessSignature(sig.id);
+                saveSignature(sig);
             }
         });
         els.transparentCheck.addEventListener('change', (e) => {
@@ -597,6 +609,7 @@
                 sig.transparent = e.target.checked;
                 els.transparentControls.classList.toggle('hidden', !sig.transparent);
                 reprocessSignature(sig.id);
+                saveSignature(sig);
             }
         });
         els.sigThresholdInput.addEventListener('input', (e) => {
@@ -607,6 +620,30 @@
                 els.valSigThreshold.innerText = val;
                 reprocessSignature(sig.id);
             }
+        });
+        // Save the threshold once the slider is released, not on every step.
+        els.sigThresholdInput.addEventListener('change', () => {
+            const sig = state.uploadedSignatures.find(s => s.id === state.activeUploadId);
+            if (sig) saveSignature(sig);
+        });
+        els.rememberSigCheck.addEventListener('change', (e) => {
+            const sig = state.uploadedSignatures.find(s => s.id === state.activeUploadId);
+            if (!sig) return;
+            if (e.target.checked) {
+                sig.remembered = true;
+                sig.savedAt = Date.now();
+                saveSignature(sig);
+            } else {
+                sig.remembered = false;
+                sigStore.remove(sig.id).catch(err => console.warn('Could not forget signature:', err));
+            }
+            renderThumbnails();
+        });
+        els.forgetSigsBtn.addEventListener('click', () => {
+            sigStore.clear().catch(err => console.warn('Could not clear saved signatures:', err));
+            state.uploadedSignatures.forEach(s => { s.remembered = false; });
+            els.rememberSigCheck.checked = false;
+            renderThumbnails();
         });
         
         els.editModeBtn.addEventListener('click', () => setMode('edit'));
@@ -729,6 +766,7 @@
                 els.sigThresholdInput.value = sig.threshold;
                 els.valSigThreshold.innerText = sig.threshold;
                 els.inkColorSelect.value = sig.inkColor;
+                els.rememberSigCheck.checked = !!sig.remembered;
             } else {
                 els.sigHint.classList.add('hidden');
                 els.sigSettings.classList.add('hidden');
@@ -741,7 +779,13 @@
             state.uploadedSignatures.forEach(sig => {
                 const div = document.createElement('div');
                 const isActive = state.activeUploadId === sig.id;
-                div.className = `w-12 h-12 border-2 rounded cursor-pointer flex items-center justify-center bg-white overflow-hidden transition-colors ${isActive ? 'border-brand-500 bg-blue-50' : 'border-gray-200 hover:border-brand-300'}`;
+                div.className = `relative w-12 h-12 border-2 rounded cursor-pointer flex items-center justify-center bg-white overflow-hidden transition-colors ${isActive ? 'border-brand-500 bg-blue-50' : 'border-gray-200 hover:border-brand-300'}`;
+                if (sig.remembered) {
+                    div.title = 'Saved on this device';
+                    const dot = document.createElement('span');
+                    dot.className = 'absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-brand-500';
+                    div.appendChild(dot);
+                }
                 div.onclick = () => {
                     selectSignature(isActive ? null : sig.id);
                     if (state.mode !== 'edit') setMode('edit');
@@ -752,11 +796,16 @@
                 div.appendChild(img);
                 els.sigThumbnails.appendChild(div);
             });
+            els.forgetSigsBtn.classList.toggle('hidden', !state.uploadedSignatures.some(s => s.remembered));
         }
 
         function deleteSignature() {
             if (!state.activeUploadId) return;
             const id = state.activeUploadId;
+            const sig = state.uploadedSignatures.find(s => s.id === id);
+            if (sig && sig.remembered) {
+                sigStore.remove(id).catch(err => console.warn('Could not forget signature:', err));
+            }
             state.uploadedSignatures = state.uploadedSignatures.filter(s => s.id !== id);
             state.signatures = state.signatures.filter(s => s.uploadId !== id);
             selectSignature(null);
@@ -789,10 +838,135 @@
             e.target.value = ''; // Reset input
         }
 
-        function reprocessSignature(id) {
-            const sig = state.uploadedSignatures.find(s => s.id === id);
-            if (!sig) return;
+        // --- Saved signatures ---
+        // Opt-in per signature ("Remember on this device"): stored in IndexedDB,
+        // downscaled, never sent anywhere (the CSP blocks network access anyway).
+        // Every operation fails soft: private windows and some file:// setups
+        // have no usable IndexedDB, and then the checkbox is simply hidden.
+        const SAVED_SIG_MAX_PX = 1000;
+        const INK_COLORS = ['original', 'black', 'blue'];
 
+        const sigStore = (() => {
+            let dbPromise = null;
+            let pending = 0;
+            function open() {
+                if (!dbPromise) {
+                    dbPromise = new Promise((resolve, reject) => {
+                        if (!window.indexedDB) throw new Error('IndexedDB is not available');
+                        const req = indexedDB.open('scanify-pro', 1);
+                        req.onupgradeneeded = () => req.result.createObjectStore('signatures', { keyPath: 'id' });
+                        req.onsuccess = () => resolve(req.result);
+                        req.onerror = () => reject(req.error);
+                    });
+                }
+                return dbPromise;
+            }
+            // pending is counted synchronously, so a caller can tell when every
+            // write it triggered has landed (the tests rely on this).
+            async function run(mode, fn) {
+                pending++;
+                try {
+                    const db = await open();
+                    return await new Promise((resolve, reject) => {
+                        const tx = db.transaction('signatures', mode);
+                        const req = fn(tx.objectStore('signatures'));
+                        tx.oncomplete = () => resolve(req.result);
+                        tx.onerror = tx.onabort = () => reject(tx.error);
+                    });
+                } finally {
+                    pending--;
+                }
+            }
+            return {
+                list: () => run('readonly', s => s.getAll()),
+                put: rec => run('readwrite', s => s.put(rec)),
+                remove: id => run('readwrite', s => s.delete(id)),
+                clear: () => run('readwrite', s => s.clear()),
+                idle: () => pending === 0
+            };
+        })();
+        window.__sigStoreIdle = sigStore.idle;
+
+        function downscaledSrc(img) {
+            const k = Math.min(1, SAVED_SIG_MAX_PX / Math.max(img.width, img.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(img.width * k));
+            canvas.height = Math.max(1, Math.round(img.height * k));
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL('image/png');
+        }
+
+        function saveSignature(sig) {
+            if (!sig.remembered) return;
+            if (!sig.savedSrc) sig.savedSrc = downscaledSrc(sig.originalImage);
+            sigStore.put({
+                id: sig.id,
+                src: sig.savedSrc,
+                transparent: sig.transparent,
+                threshold: sig.threshold,
+                inkColor: sig.inkColor,
+                processed: !!sig.processed,
+                savedAt: sig.savedAt
+            }).catch(err => {
+                console.warn('Could not save signature:', err);
+                sig.remembered = false;
+                if (state.activeUploadId === sig.id) els.rememberSigCheck.checked = false;
+                renderThumbnails();
+                alert('Could not save the signature in this browser (storage full or disabled). It stays usable until you close the page.');
+            });
+        }
+
+        function loadImage(src) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error('unreadable image'));
+                img.src = src;
+            });
+        }
+
+        async function restoreSavedSignatures() {
+            let records;
+            try {
+                records = await sigStore.list();
+            } catch (err) {
+                console.warn('Saved signatures unavailable:', err);
+                els.rememberControls.classList.add('hidden');
+                return;
+            }
+            records.sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
+            for (const rec of records) {
+                if (typeof rec.src !== 'string' || !rec.src.startsWith('data:image/')) continue;
+                let img;
+                try {
+                    img = await loadImage(rec.src);
+                } catch (err) {
+                    console.warn('Skipping unreadable saved signature:', err);
+                    continue;
+                }
+                const sig = {
+                    id: rec.id,
+                    originalImage: img,
+                    processedImage: img,
+                    transparent: !!rec.transparent,
+                    threshold: Number.isInteger(rec.threshold) ? rec.threshold : 40,
+                    inkColor: INK_COLORS.includes(rec.inkColor) ? rec.inkColor : 'black',
+                    processed: !!rec.processed,
+                    src: rec.src,
+                    savedSrc: rec.src,
+                    remembered: true,
+                    savedAt: rec.savedAt
+                };
+                if (sig.processed) processSignature(sig);
+                state.uploadedSignatures.push(sig);
+            }
+            renderThumbnails();
+        }
+
+        // Untouched uploads keep the original image; the ink and background
+        // settings apply once the user changes one of them.
+        function processSignature(sig) {
+            sig.processed = true;
             if (sig.transparent) {
                 sig.processedImage = makeSignatureTransparent(sig.originalImage, sig.threshold, sig.inkColor);
             } else {
@@ -803,6 +977,12 @@
                     sig.processedImage = sig.originalImage;
                 }
             }
+        }
+
+        function reprocessSignature(id) {
+            const sig = state.uploadedSignatures.find(s => s.id === id);
+            if (!sig) return;
+            processSignature(sig);
 
             // Update all instances on pages
             state.signatures.forEach(s => {
@@ -1243,6 +1423,8 @@
             els.controls.classList.remove('pointer-events-none', 'opacity-50');
             els.progressBar.style.width = '0%';
         }
+
+        restoreSavedSignatures();
 
     </script>
 </body>
