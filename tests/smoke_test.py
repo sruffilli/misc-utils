@@ -496,6 +496,69 @@ def scanner_appends_pdfs(c: Ctx):
     no_errors(page)
 
 
+def ink_in_preview(page: Page):
+    """Dark pixels in the middle band of the preview canvas, where make_pdf draws nothing."""
+    return page.evaluate("""() => {
+        const c = document.querySelector('#previewWrapper canvas');
+        const h = c.height;
+        const d = c.getContext('2d').getImageData(0, Math.round(h * 0.3), c.width, Math.round(h * 0.4)).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] < 200) n++;
+        return n;
+    }""")
+
+
+@test
+def scanner_places_text(c: Ctx):
+    page = c.page("/webutils/pdf-scanner.html")
+    load_pdf(page, [(595, 842)])
+    boxes = page.locator("#overlayContainer > div")
+
+    # nothing to place without text
+    page.locator("#placeTextBtn").click()
+    expect(page.locator("#sigHint")).to_be_hidden()
+
+    page.locator("#textInput").fill("Bologna,")
+    page.locator("#insertDateBtn").click()
+    value = page.locator("#textInput").input_value()
+    assert re.fullmatch(r"Bologna, \d{2}/\d{2}/\d{4}", value), value
+
+    page.locator("#placeTextBtn").click()
+    expect(page.locator("#sigHint")).to_be_visible()
+    before = ink_in_preview(page)
+    page.locator("#overlayContainer").click()
+    expect(boxes).to_have_count(1)
+    expect(page.locator("#sigHint")).to_be_hidden()  # one click, one text
+    page.locator("#overlayContainer").click(position={"x": 20, "y": 500})
+    expect(boxes).to_have_count(1)
+    page.wait_for_timeout(200)
+    assert ink_in_preview(page) > before, "text not drawn on the page"
+
+    # one line of text: much wider than tall, and it keeps that shape when resized
+    box = boxes.first.bounding_box()
+    assert box["width"] > 5 * box["height"], box
+    handle = boxes.first.locator("[data-action=resize]")
+    boxes.first.hover()
+    hb = handle.bounding_box()
+    page.mouse.move(hb["x"] + hb["width"] / 2, hb["y"] + hb["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(hb["x"] + 60, hb["y"] + 2, steps=5)
+    page.mouse.up()
+    resized = boxes.first.bounding_box()
+    assert resized["width"] > box["width"] + 20, (box, resized)
+    ratio = lambda b: b["width"] / b["height"]
+    assert abs(ratio(resized) - ratio(box)) / ratio(box) < 0.05, (box, resized)
+
+    # double-click edits the text
+    page.once("dialog", lambda d: d.accept("Rimini"))
+    boxes.first.locator("[data-action=move]").dblclick()
+    page.wait_for_timeout(200)
+    assert boxes.first.bounding_box()["width"] < resized["width"] / 2
+
+    assert export_pdf(page).startswith(b"%PDF")
+    no_errors(page)
+
+
 def make_png(width, height):
     """Grey RGB PNG with a black stroke across the middle."""
     import struct

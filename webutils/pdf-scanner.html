@@ -215,6 +215,28 @@
                             </p>
                         </div>
                     </div>
+
+                    <div class="mt-4 space-y-2">
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Text</h3>
+                        <div class="flex gap-1">
+                            <input type="text" id="textInput" maxlength="200" placeholder="e.g. Bologna, 12/05/2025"
+                                class="flex-1 min-w-0 text-xs bg-white border border-gray-200 rounded px-2 py-1.5">
+                            <button id="insertDateBtn" title="Insert today's date" class="text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 rounded font-medium">Today</button>
+                        </div>
+                        <div class="flex gap-1">
+                            <select id="textFontSelect" class="flex-1 text-[10px] bg-white border border-gray-200 rounded px-1 py-1">
+                                <option value="hand">Handwriting</option>
+                                <option value="sans">Sans</option>
+                                <option value="serif">Serif</option>
+                            </select>
+                            <select id="textColorSelect" class="flex-1 text-[10px] bg-white border border-gray-200 rounded px-1 py-1">
+                                <option value="black">Black</option>
+                                <option value="blue">Blue</option>
+                            </select>
+                        </div>
+                        <button id="placeTextBtn" class="w-full border-2 border-dashed border-gray-300 hover:border-brand-500 hover:bg-blue-50 bg-white rounded-xl p-2 text-xs font-medium text-gray-900 transition-all">Place Text</button>
+                        <p class="text-[10px] text-gray-500">Double-click placed text to edit it.</p>
+                    </div>
                     <p id="sigHint" class="text-[10px] text-brand-600 font-medium text-center mt-2 hidden">Click on the document to place</p>
 
                     <button id="applyEffectsBtn" class="w-full mt-4 bg-brand-600 hover:bg-brand-700 text-white h-10 rounded-lg text-sm font-medium shadow-sm flex items-center justify-center gap-2 transition-all hidden">
@@ -548,6 +570,7 @@
             signatures: [],
             uploadedSignatures: [],
             activeUploadId: null,
+            textArmed: false, // the next click on the page places the text box content
             mode: 'scanify', // 'scanify' or 'edit'
             zoom: 1.0,
             config: {
@@ -587,6 +610,11 @@
             rememberControls: document.getElementById('rememberControls'),
             rememberSigCheck: document.getElementById('rememberSigCheck'),
             forgetSigsBtn: document.getElementById('forgetSigsBtn'),
+            textInput: document.getElementById('textInput'),
+            insertDateBtn: document.getElementById('insertDateBtn'),
+            textFontSelect: document.getElementById('textFontSelect'),
+            textColorSelect: document.getElementById('textColorSelect'),
+            placeTextBtn: document.getElementById('placeTextBtn'),
             valSigThreshold: document.getElementById('val-sigThreshold'),
             downloadBtn: document.getElementById('downloadBtn'),
             dpiSelect: document.getElementById('dpiSelect'),
@@ -665,6 +693,15 @@
             renderThumbnails();
         });
         
+        els.insertDateBtn.addEventListener('click', () => {
+            const today = new Date().toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const current = els.textInput.value.trimEnd();
+            els.textInput.value = current ? `${current} ${today}` : today;
+            els.textInput.focus();
+        });
+        els.placeTextBtn.addEventListener('click', armText);
+        els.textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') armText(); });
+
         els.editModeBtn.addEventListener('click', () => setMode('edit'));
         els.applyEffectsBtn.addEventListener('click', () => setMode('scanify'));
 
@@ -765,19 +802,40 @@
                 els.applyEffectsBtn.classList.add('hidden');
                 els.editModeBtn.classList.remove('hidden');
                 els.controls.classList.remove('opacity-40', 'pointer-events-none');
+                state.textArmed = false;
                 selectSignature(null);
             }
             updatePreview();
         }
 
+        // Shows whether the next click on the page places something.
+        function updatePlacementHint() {
+            const armed = !!state.activeUploadId || state.textArmed;
+            els.sigHint.classList.toggle('hidden', !armed);
+            els.placeTextBtn.classList.toggle('border-brand-500', state.textArmed);
+            els.placeTextBtn.classList.toggle('bg-blue-50', state.textArmed);
+            const overlay = document.getElementById('overlayContainer');
+            if (overlay) overlay.style.cursor = armed ? 'crosshair' : 'default';
+        }
+
+        function armText() {
+            if (!els.textInput.value.trim()) {
+                els.textInput.focus();
+                return;
+            }
+            if (state.activeUploadId) selectSignature(null);
+            if (state.mode !== 'edit') setMode('edit');
+            state.textArmed = true;
+            updatePlacementHint();
+        }
+
         function selectSignature(id) {
             state.activeUploadId = id;
+            if (id) state.textArmed = false;
             renderThumbnails();
-            const overlay = document.getElementById('overlayContainer');
+            updatePlacementHint();
             if (id) {
-                els.sigHint.classList.remove('hidden');
                 els.sigSettings.classList.remove('hidden');
-                if (overlay) overlay.style.cursor = 'crosshair';
 
                 const sig = state.uploadedSignatures.find(s => s.id === id);
                 els.transparentCheck.checked = sig.transparent;
@@ -787,10 +845,71 @@
                 els.inkColorSelect.value = sig.inkColor;
                 els.rememberSigCheck.checked = !!sig.remembered;
             } else {
-                els.sigHint.classList.add('hidden');
                 els.sigSettings.classList.add('hidden');
-                if (overlay) overlay.style.cursor = 'default';
             }
+        }
+
+        // --- Text ---
+        // Text is drawn once onto a canvas and then placed like a signature,
+        // so moving, rotating, deleting and export work the same way.
+        const TEXT_FONTS = {
+            hand: '"Bradley Hand", "Segoe Print", "Segoe Script", "Comic Sans MS", cursive',
+            sans: 'Helvetica, Arial, sans-serif',
+            serif: '"Times New Roman", Times, serif'
+        };
+        const TEXT_COLORS = { black: 'rgb(17, 17, 17)', blue: 'rgb(10, 50, 160)' };
+        const TEXT_RENDER_PX = 96;     // canvas font size: sharp up to 300 DPI at large sizes
+        const TEXT_DEFAULT_HEIGHT = 16; // PDF points, about a 12 pt line
+
+        function renderTextImage(text, font, color) {
+            const fontStr = `${TEXT_RENDER_PX}px ${TEXT_FONTS[font] || TEXT_FONTS.sans}`;
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.font = fontStr;
+            const pad = TEXT_RENDER_PX * 0.1;
+            canvas.width = Math.max(1, Math.ceil(ctx.measureText(text).width + 2 * pad));
+            canvas.height = Math.ceil(TEXT_RENDER_PX * 1.35);
+            ctx.font = fontStr; // resizing the canvas resets the context
+            ctx.fillStyle = TEXT_COLORS[color] || TEXT_COLORS.black;
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, pad, canvas.height / 2);
+            return canvas;
+        }
+
+        function placeText(x, y) {
+            const text = els.textInput.value.trim();
+            state.textArmed = false;
+            updatePlacementHint();
+            if (!text) return;
+            const font = els.textFontSelect.value;
+            const color = els.textColorSelect.value;
+            const image = renderTextImage(text, font, color);
+            state.signatures.push({
+                id: uid(),
+                uploadId: null,
+                kind: 'text',
+                text, font, color,
+                page: state.currentPage,
+                image,
+                x, y,
+                height: TEXT_DEFAULT_HEIGHT,
+                width: TEXT_DEFAULT_HEIGHT * image.width / image.height,
+                rotation: 0
+            });
+            updatePreview();
+        }
+
+        function editText(item) {
+            const text = prompt('Edit text', item.text);
+            if (text === null) return;
+            if (!text.trim()) {
+                state.signatures = state.signatures.filter(s => s.id !== item.id);
+            } else {
+                item.text = text.trim().slice(0, 200);
+                item.image = renderTextImage(item.text, item.font, item.color);
+                item.width = item.height * item.image.width / item.image.height; // keep the font size
+            }
+            updatePreview();
         }
 
         function renderThumbnails() {
@@ -1210,6 +1329,12 @@
             };
 
             overlayContainer.addEventListener('pointerdown', handleOverlayPointerDown);
+            overlayContainer.addEventListener('dblclick', (e) => {
+                if (state.mode !== 'edit') return;
+                const item = state.signatures.find(s => s.id === e.target.dataset.id);
+                if (item && item.kind === 'text') editText(item);
+            });
+            updatePlacementHint();
 
             updatePreview();
         }
@@ -1328,6 +1453,9 @@
 
                 window.addEventListener('pointermove', handlePointerMove);
                 window.addEventListener('pointerup', handlePointerUp);
+            } else if (state.textArmed) {
+                const rect = document.getElementById('overlayContainer').getBoundingClientRect();
+                placeText((e.clientX - rect.left) / state.zoom, (e.clientY - rect.top) / state.zoom);
             } else if (state.activeUploadId) {
                 const activeSig = state.uploadedSignatures.find(s => s.id === state.activeUploadId);
                 if (!activeSig) return;
@@ -1381,8 +1509,15 @@
                 const localDx = pdx * cos - pdy * sin;
                 const localDy = pdx * sin + pdy * cos;
                 
-                sig.width = Math.max(20, initialSig.width + localDx * 2);
-                sig.height = Math.max(20, initialSig.height + localDy * 2);
+                if (sig.kind === 'text') {
+                    // Text keeps its proportions: a stretched font looks fake.
+                    const aspect = initialSig.width / initialSig.height;
+                    sig.height = Math.max(6, initialSig.height + localDx * 2 / aspect);
+                    sig.width = sig.height * aspect;
+                } else {
+                    sig.width = Math.max(20, initialSig.width + localDx * 2);
+                    sig.height = Math.max(20, initialSig.height + localDy * 2);
+                }
             }
             else if (action === 'rotate') {
                 const container = document.getElementById('overlayContainer');
